@@ -13,6 +13,7 @@ const DEFAULT_THRESHOLD_MS = 15000;
 const DEFAULT_DEBOUNCE_MS = 3000;
 const NOTIFY_TIMEOUT_MS = 5000;
 const DEFAULT_NOTIFY_LEVEL = "all";
+const ASSISTANT_RESPONSE_MAX_LENGTH = 500;
 
 type NotifyLevel = "all" | "medium" | "low" | "disabled";
 
@@ -266,6 +267,29 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 		}
 	});
 
+	const getAssistantResponseText = (messages: readonly unknown[]): string | undefined => {
+		const lastAssistant = getLastAssistantMessage(messages);
+		if (!lastAssistant || !Array.isArray(lastAssistant.content)) return undefined;
+
+		const text = lastAssistant.content
+			.filter(
+				(part): part is { type: "text"; text: string } =>
+					typeof part === "object" &&
+					part !== null &&
+					part.type === "text" &&
+					typeof part.text === "string" &&
+					part.text.trim().length > 0,
+			)
+			.map((part) => part.text.trim())
+			.join("\n")
+			.trim();
+
+		if (text.length === 0) return undefined;
+		return text.length > ASSISTANT_RESPONSE_MAX_LENGTH
+			? `${text.slice(0, ASSISTANT_RESPONSE_MAX_LENGTH - 3)}...`
+			: text;
+	};
+
 	pi.on("agent_end", async (event) => {
 		const durationMs = Date.now() - runState.startedAt;
 		const runError = summarizeRunError(event.messages, runState.firstToolError);
@@ -273,7 +297,14 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 		if (!shouldNotify(notifyLevel, subtitle)) {
 			return;
 		}
-		const body = runError || summarizeSuccess(runState, durationMs, thresholdMs);
+		let body = runError || summarizeSuccess(runState, durationMs, thresholdMs);
+
+		// Append LLM response text to notification body
+		const responseText = getAssistantResponseText(event.messages);
+		if (responseText) {
+			body = `${body}\n${responseText}`;
+		}
+
 		await sendNotification(subtitle, body);
 	});
 
