@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ToolResultEvent } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 import {
 	isBashToolResult,
 	isEditToolResult,
@@ -6,7 +6,7 @@ import {
 	isGrepToolResult,
 	isReadToolResult,
 	isWriteToolResult,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { basename } from "node:path";
 
 const DEFAULT_THRESHOLD_MS = 15000;

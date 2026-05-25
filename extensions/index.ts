@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import cmuxNotifyExtension from "./cmux-notify.ts";
 import cmuxSplitExtension from "./cmux-split.ts";
 import cmuxZoxideExtension from "./cmux-zoxide.ts";

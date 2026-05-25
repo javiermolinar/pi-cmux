@@ -1,10 +1,10 @@
 # pi-cmux
 
-Pi package with cmux-powered terminal integrations for [Pi](https://pi.dev).
+Pi package with [cmux](https://www.cmux.dev)-powered terminal integrations for [Pi](https://pi.dev).
 
 ## Why
 
-[Pi](https://pi.dev) works well in the terminal, but terminal-native actions like workspace notifications, editor launching, and pane orchestration are better handled by cmux. This package collects Pi extensions that use the cmux API instead of baking those workflows into Pi itself.
+[Pi](https://pi.dev) works well in the terminal, but terminal-native actions like workspace notifications, editor launching, and pane orchestration are better handled by [cmux](https://www.cmux.dev). This package collects Pi extensions that use the cmux API instead of baking those workflows into Pi itself.
 
 It currently includes cmux-powered notifications, split commands, generic tool launchers, zoxide jumps, review workflows, and split-based task handoff.
 
