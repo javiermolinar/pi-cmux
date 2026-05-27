@@ -13,6 +13,8 @@ const DEFAULT_THRESHOLD_MS = 15000;
 const DEFAULT_DEBOUNCE_MS = 3000;
 const NOTIFY_TIMEOUT_MS = 5000;
 const DEFAULT_NOTIFY_LEVEL = "all";
+const DEFAULT_INCLUDE_ASSISTANT_RESPONSE = false;
+const ASSISTANT_RESPONSE_MAX_LENGTH = 500;
 
 type NotifyLevel = "all" | "medium" | "low" | "disabled";
 
@@ -37,6 +39,14 @@ function getNumberFromEnv(name: string, fallback: number): number {
 	if (!value) return fallback;
 	const parsed = Number.parseInt(value, 10);
 	return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+function getBooleanFromEnv(name: string, fallback: boolean): boolean {
+	const value = process.env[name]?.trim().toLowerCase();
+	if (!value) return fallback;
+	if (value === "1" || value === "true" || value === "yes" || value === "on") return true;
+	if (value === "0" || value === "false" || value === "no" || value === "off") return false;
+	return fallback;
 }
 
 function getNotifyLevelFromEnv(): NotifyLevel {
@@ -139,7 +149,7 @@ function getLastAssistantMessage(messages: readonly unknown[]): AssistantMessage
 	return undefined;
 }
 
-function summarizeAssistantText(message: AssistantMessageLike): string | undefined {
+function extractAssistantText(message: AssistantMessageLike): string | undefined {
 	if (!Array.isArray(message.content)) return undefined;
 
 	const text = message.content
@@ -155,8 +165,26 @@ function summarizeAssistantText(message: AssistantMessageLike): string | undefin
 		.join("\n")
 		.trim();
 
-	if (text.length === 0) return undefined;
-	return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+	return text.length > 0 ? text : undefined;
+}
+
+function truncateText(text: string, maxLength: number): string {
+	return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
+}
+
+function summarizeAssistantText(message: AssistantMessageLike): string | undefined {
+	const text = extractAssistantText(message);
+	return text ? truncateText(text, 120) : undefined;
+}
+
+function getAssistantResponseText(messages: readonly unknown[]): string | undefined {
+	const lastAssistant = getLastAssistantMessage(messages);
+	if (!lastAssistant || (lastAssistant.stopReason !== "stop" && lastAssistant.stopReason !== "length")) {
+		return undefined;
+	}
+
+	const text = extractAssistantText(lastAssistant);
+	return text ? truncateText(text, ASSISTANT_RESPONSE_MAX_LENGTH) : undefined;
 }
 
 function summarizeRunError(messages: readonly unknown[], fallbackError?: string): string | undefined {
@@ -199,6 +227,7 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	const thresholdMs = getNumberFromEnv("PI_CMUX_NOTIFY_THRESHOLD_MS", DEFAULT_THRESHOLD_MS);
 	const debounceMs = getNumberFromEnv("PI_CMUX_NOTIFY_DEBOUNCE_MS", DEFAULT_DEBOUNCE_MS);
 	const notifyLevel = getNotifyLevelFromEnv();
+	const includeAssistantResponse = getBooleanFromEnv("PI_CMUX_NOTIFY_INCLUDE_RESPONSE", DEFAULT_INCLUDE_ASSISTANT_RESPONSE);
 	const title = process.env.PI_CMUX_NOTIFY_TITLE || "Pi";
 
 	let runState = createEmptyRunState();
@@ -273,7 +302,15 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 		if (!shouldNotify(notifyLevel, subtitle)) {
 			return;
 		}
-		const body = runError || summarizeSuccess(runState, durationMs, thresholdMs);
+		let body = runError || summarizeSuccess(runState, durationMs, thresholdMs);
+
+		if (!runError && includeAssistantResponse) {
+			const responseText = getAssistantResponseText(event.messages);
+			if (responseText) {
+				body = `${body}\n${responseText}`;
+			}
+		}
+
 		await sendNotification(subtitle, body);
 	});
 

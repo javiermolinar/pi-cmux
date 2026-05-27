@@ -64,6 +64,8 @@ All notifications use:
 - subtitle: current run state
 - body: a short summary of what pi just did
 
+Set `PI_CMUX_NOTIFY_INCLUDE_RESPONSE=1` to append up to 500 characters of the final assistant response to non-error notifications. This is disabled by default because assistant responses can contain sensitive text. Response text is only appended for final assistant messages that stopped normally or due to length limits; tool-use, error, and aborted turns are ignored.
+
 Current notification types:
 
 - `Waiting`
@@ -101,6 +103,7 @@ Notification bodies are summarized from the run itself:
 - searches from `grep` and `find`
 - shell activity from `bash`
 - the final agent error, with the first tool failure used as a fallback summary when needed
+- optionally, the final assistant response when `PI_CMUX_NOTIFY_INCLUDE_RESPONSE=1`
 
 ### cmux split commands
 

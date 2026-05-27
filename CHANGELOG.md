@@ -18,6 +18,7 @@
 - Made `/cmrv` and `/cmrh` default to reviewing the current git diff when run without arguments.
 - Extended `/cmcv -c` and `/cmch -c` to support `--from <ref>` / `-f <ref>` when creating a new worktree branch.
 - Added `PI_CMUX_NOTIFY_LEVEL=all|medium|low|disabled` so notification verbosity can be configured with one opinionated setting.
+- Added `PI_CMUX_NOTIFY_INCLUDE_RESPONSE=1` to optionally append the final assistant response to non-error notifications.
 
 ### Fixed
 
