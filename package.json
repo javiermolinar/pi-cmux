@@ -24,6 +24,10 @@
   "bin": {
     "pi-cmux": "install.mjs"
   },
+  "scripts": {
+    "typecheck": "tsc --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --allowImportingTsExtensions --skipLibCheck --strict extensions/*.ts",
+    "pack:check": "npm pack --dry-run"
+  },
   "files": [
     "extensions/",
     "skills/",
@@ -51,7 +55,7 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "typescript": "*"
+    "@earendil-works/pi-coding-agent": "0.75.5",
+    "typescript": "5.9.3"
   }
 }

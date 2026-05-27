@@ -11,6 +11,7 @@
 ### Changed
 
 - Condensed the README and moved detailed command examples to `docs/usage.md`.
+- Hardened CI with `npm ci`, a committed lockfile, pinned development dependencies, and reusable npm scripts.
 
 ### Fixed
 
