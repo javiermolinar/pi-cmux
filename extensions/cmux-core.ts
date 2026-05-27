@@ -13,7 +13,14 @@ export type SplitDirection = "right" | "down";
 
 interface CmuxCallerInfo {
 	workspace_ref?: string;
+	pane_ref?: string;
 	surface_ref?: string;
+}
+
+interface CmuxCallerContext {
+	workspace_ref: string;
+	surface_ref: string;
+	pane_ref?: string;
 }
 
 interface CmuxIdentifyResponse {
@@ -39,6 +46,12 @@ interface CmuxExecResult {
 
 export interface OpenCommandInNewSplitOptions {
 	tabTitle?: string;
+	focus?: boolean;
+}
+
+export interface OpenCommandInNewTabOptions {
+	tabTitle?: string;
+	focus?: boolean;
 }
 
 function delay(ms: number): Promise<void> {
@@ -153,7 +166,7 @@ async function execCmux(pi: ExtensionAPI, args: string[]): Promise<CmuxExecResul
 	};
 }
 
-async function getCallerInfo(pi: ExtensionAPI): Promise<{ ok: true; caller: Required<CmuxCallerInfo> } | { ok: false; error: string }> {
+async function getCallerInfo(pi: ExtensionAPI): Promise<{ ok: true; caller: CmuxCallerContext } | { ok: false; error: string }> {
 	const result = await execCmux(pi, ["--json", "identify"]);
 	if (!result.ok) {
 		return { ok: false, error: result.error || "Failed to identify cmux caller" };
@@ -166,7 +179,14 @@ async function getCallerInfo(pi: ExtensionAPI): Promise<{ ok: true; caller: Requ
 		return { ok: false, error: "This command must be run from inside a cmux surface" };
 	}
 
-	return { ok: true, caller: { workspace_ref: workspaceRef, surface_ref: surfaceRef } };
+	return {
+		ok: true,
+		caller: {
+			workspace_ref: workspaceRef,
+			surface_ref: surfaceRef,
+			pane_ref: parsed?.caller?.pane_ref,
+		},
+	};
 }
 
 async function listPanes(pi: ExtensionAPI, workspaceRef: string): Promise<{ ok: true; panes: CmuxPaneInfo[] } | { ok: false; error: string }> {
@@ -236,6 +256,29 @@ async function renameSurfaceTab(pi: ExtensionAPI, workspaceRef: string, surfaceR
 	}
 }
 
+async function respawnSurface(
+	pi: ExtensionAPI,
+	workspaceRef: string,
+	surfaceRef: string,
+	command: string,
+	failureMessage: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+	const respawnResult = await execCmux(pi, [
+		"respawn-pane",
+		"--workspace",
+		workspaceRef,
+		"--surface",
+		surfaceRef,
+		"--command",
+		command,
+	]);
+	if (!respawnResult.ok) {
+		return { ok: false, error: respawnResult.error || failureMessage };
+	}
+
+	return { ok: true };
+}
+
 export async function openCommandInNewSplit(
 	pi: ExtensionAPI,
 	direction: SplitDirection,
@@ -253,14 +296,19 @@ export async function openCommandInNewSplit(
 		return beforePanesResult;
 	}
 
-	const splitResult = await execCmux(pi, [
+	const splitArgs = [
 		"new-split",
 		direction,
 		"--workspace",
 		workspaceRef,
 		"--surface",
 		surfaceRef,
-	]);
+	];
+	if (options.focus !== undefined) {
+		splitArgs.push("--focus", String(options.focus));
+	}
+
+	const splitResult = await execCmux(pi, splitArgs);
 	if (!splitResult.ok) {
 		return { ok: false, error: splitResult.error || "Failed to create cmux split" };
 	}
@@ -272,17 +320,61 @@ export async function openCommandInNewSplit(
 
 	await delay(SURFACE_BOOT_DELAY_MS);
 
-	const respawnResult = await execCmux(pi, [
-		"respawn-pane",
+	const respawnResult = await respawnSurface(pi, workspaceRef, newSurfaceRef, command, "Failed to start pi in the new split");
+	if (!respawnResult.ok) {
+		return respawnResult;
+	}
+
+	await renameSurfaceTab(pi, workspaceRef, newSurfaceRef, options.tabTitle);
+
+	return { ok: true };
+}
+
+export async function openCommandInNewTab(
+	pi: ExtensionAPI,
+	command: string,
+	options: OpenCommandInNewTabOptions = {},
+): Promise<{ ok: true } | { ok: false; error: string }> {
+	const callerResult = await getCallerInfo(pi);
+	if (!callerResult.ok) {
+		return callerResult;
+	}
+
+	const { workspace_ref: workspaceRef, pane_ref: paneRef } = callerResult.caller;
+	if (!paneRef) {
+		return { ok: false, error: "This command must be run from inside a cmux pane" };
+	}
+
+	const beforePanesResult = await listPanes(pi, workspaceRef);
+	if (!beforePanesResult.ok) {
+		return beforePanesResult;
+	}
+
+	const newSurfaceResult = await execCmux(pi, [
+		"new-surface",
+		"--type",
+		"terminal",
 		"--workspace",
 		workspaceRef,
-		"--surface",
-		newSurfaceRef,
-		"--command",
-		command,
+		"--pane",
+		paneRef,
+		"--focus",
+		String(options.focus ?? true),
 	]);
+	if (!newSurfaceResult.ok) {
+		return { ok: false, error: newSurfaceResult.error || "Failed to create cmux tab" };
+	}
+
+	const newSurfaceRef = await waitForNewSurface(pi, workspaceRef, beforePanesResult.panes);
+	if (!newSurfaceRef) {
+		return { ok: false, error: "Created tab, but could not find the new cmux surface" };
+	}
+
+	await delay(SURFACE_BOOT_DELAY_MS);
+
+	const respawnResult = await respawnSurface(pi, workspaceRef, newSurfaceRef, command, "Failed to start command in the new tab");
 	if (!respawnResult.ok) {
-		return { ok: false, error: respawnResult.error || "Failed to start pi in the new split" };
+		return respawnResult;
 	}
 
 	await renameSurfaceTab(pi, workspaceRef, newSurfaceRef, options.tabTitle);

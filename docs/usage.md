@@ -80,15 +80,17 @@ Legacy aliases:
 - `/cmux-v` → `/cmv`
 - `/cmux-h` → `/cmh`
 
-## Tool splits
+## Tool splits and tabs
 
 ```text
 /cmo <command...>
 /cmoh <command...>
+/cmt <command...>
 ```
 
 - `/cmo` opens a split to the right and runs a shell command.
 - `/cmoh` opens a split below and runs a shell command.
+- `/cmt` opens a new cmux tab and runs a shell command.
 - Commands run via `sh -lc` in the current project directory.
 
 Examples:
@@ -97,11 +99,26 @@ Examples:
 /cmo hx
 /cmo npm test
 /cmoh npm run dev
+/cmt k9s
 /cmo watch -n 1 git status --short
 ```
 
 Alias:
 - `/cmov` → `/cmo`
+
+## Agent-opened terminals
+
+`pi-cmux` registers a `cmux_open_terminal` tool so Pi can open interactive terminal programs when explicitly asked.
+
+Example requests:
+
+```text
+open k9s in a new tab
+open lazygit in a right split
+open npm run dev below
+```
+
+The tool supports `tab`, `right`, and `down` placements. It is meant for TUIs, log tails, dev servers, watches, and other terminal views that should remain interactive instead of being captured through the normal shell tool.
 
 ## Pluggable tool commands
 

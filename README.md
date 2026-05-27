@@ -37,7 +37,7 @@ If Pi is already running:
 | Notifications | automatic | Sends `cmux notify` when Pi waits, completes work, or errors. |
 | Sidebar status/log | automatic | Updates cmux status, progress, logs, and surface flash while Pi runs. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
-| Run a tool | `/cmo <cmd>`, `/cmoh <cmd>` | Opens a split and runs a shell command in the same project. |
+| Run a tool | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` | Opens a split or tab and runs a shell command in the same project. |
 | Pluggable tools | custom `/<name>` | Registers cmux split shortcuts from `pi-cmux.commands` settings. |
 | Jump directory | `/cmz <query>`, `/cmzh <query>` | Resolves a zoxide match or path, then opens Pi there. |
 | Continue task | `/cmcv [note]`, `/cmch [note]` | Opens a related handoff session in a split. |
@@ -51,6 +51,7 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 ```text
 /cmv Review the auth flow
 /cmo npm test
+/cmt k9s
 /cmz mono
 /cmcv focus on tests
 /cmcv -c fix/sidebar --from main
@@ -91,6 +92,8 @@ Example Hunk review shortcut:
 ```
 
 Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then ask Pi to read them.
+
+`pi-cmux` also exposes an agent tool so Pi can open an explicitly requested terminal command in a cmux split or tab. For example, asking "open k9s in a new tab" lets Pi open `k9s` without trying to capture the TUI through a shell command.
 
 cmux workspace/surface targeting uses `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID` automatically. Sidebar integration only activates inside a cmux workspace.
 

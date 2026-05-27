@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-05-27
+
+### Added
+
+- Added `/cmt` to open a shell command in a new cmux tab.
+- Added an agent-facing `cmux_open_terminal` tool so Pi can open explicitly requested interactive terminal commands in cmux splits or tabs.
+
 ## [0.1.15] - 2026-05-27
 
 ### Added
