@@ -465,6 +465,7 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	let runState = createEmptyRunState();
 	let pendingPrompt: string | undefined;
 	let runSequence = 0;
+	let agentActive = false;
 	let cmuxUnavailable = false;
 	let flashUnavailable = false;
 	let commandQueue = Promise.resolve();
@@ -473,6 +474,7 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	let tokenRunTotals = createEmptyTokenTotals();
 	let liveAssistantUsage: TokenUsageLike | undefined;
 	let latestTokenSummary: string | undefined;
+	let activeToolCount = 0;
 	let currentProgressValue: number | undefined;
 	let currentProgressLabel: string | undefined;
 	let lastTokenProgressUpdateAt = 0;
@@ -607,6 +609,8 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 		tokenRunTotals = createEmptyTokenTotals();
 		liveAssistantUsage = undefined;
 		latestTokenSummary = undefined;
+		agentActive = false;
+		activeToolCount = 0;
 		clearProgress();
 		clearStatus();
 	});
@@ -617,12 +621,14 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 
 	pi.on("agent_start", async (_event, ctx) => {
 		runSequence += 1;
+		agentActive = true;
 		cancelFinalClear();
 		runState = createEmptyRunState(pendingPrompt);
 		pendingPrompt = undefined;
 		tokenBaseTotals = tokenTrackingEnabled ? getBranchTokenTotals(ctx.sessionManager.getBranch()) : createEmptyTokenTotals();
 		tokenRunTotals = createEmptyTokenTotals();
 		liveAssistantUsage = undefined;
+		activeToolCount = 0;
 		updateLatestTokenSummary(tokenBaseTotals);
 		setStatus("running", "Pi running");
 		setProgress(0.08, "Starting");
@@ -652,6 +658,7 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("tool_execution_start", async (event) => {
+		activeToolCount += 1;
 		setStatus("tool", `Pi ${event.toolName}`);
 		setProgress(estimateProgress(runState), event.toolName);
 		if (toolLogsEnabled) {
@@ -695,7 +702,17 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 		setProgress(estimateProgress(runState), "Working");
 	});
 
+	pi.on("tool_execution_end", async () => {
+		activeToolCount = Math.max(0, activeToolCount - 1);
+		if (agentActive && activeToolCount === 0) {
+			setStatus("running", "Pi thinking");
+			setProgress(estimateProgress(runState), "Thinking");
+		}
+	});
+
 	pi.on("agent_end", async (event) => {
+		agentActive = false;
+		activeToolCount = 0;
 		const durationMs = Date.now() - runState.startedAt;
 		const failure = summarizeRunFailure(event.messages, runState.firstToolError);
 		const finalState = buildFinalState(failure, runState, durationMs, thresholdMs);
@@ -737,6 +754,8 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 
 	pi.on("session_shutdown", async () => {
 		runSequence += 1;
+		agentActive = false;
+		activeToolCount = 0;
 		cancelFinalClear();
 		clearProgress();
 		clearStatus();
