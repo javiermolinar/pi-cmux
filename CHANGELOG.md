@@ -6,6 +6,10 @@
 
 - Added opt-in tool-start notifications via `pi-cmux.notify.tools` in global or project Pi settings.
 
+### Fixed
+
+- Suppressed `cmux-notify` final-run notifications for detected `pi-subagents` subagents while preserving main-agent final-run notifications and configured tool-start notifications.
+
 ## [0.1.16] - 2026-05-27
 
 ### Added

@@ -34,7 +34,7 @@ If Pi is already running:
 
 | Workflow | Commands | Summary |
 |---|---|---|
-| Notifications | automatic | Sends `cmux notify` when Pi waits, completes work, or errors. |
+| Notifications | automatic | Sends `cmux notify` when the main Pi agent waits, completes work, or errors. |
 | Sidebar status/log | automatic | Updates cmux status, progress, logs, and surface flash while Pi runs. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
 | Run a tool | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` | Opens a split or tab and runs a shell command in the same project. |
@@ -89,7 +89,9 @@ Example tool notification settings:
 }
 ```
 
-Configured tools send `cmux notify` when they start. `PI_CMUX_NOTIFY_LEVEL=disabled` disables both final-run and tool-start notifications.
+Configured tools request `cmux notify` when they start; duplicate identical tool-start notifications may be debounced. `PI_CMUX_NOTIFY_LEVEL=disabled` disables both final-run and tool-start notifications.
+
+Final-run notifications are sent for the main Pi agent only; detected `pi-subagents` subagents do not emit `Waiting`, `Task Complete`, or `Error` final-run notifications. Configured tool-start notifications are unchanged.
 
 Example Hunk review shortcut:
 

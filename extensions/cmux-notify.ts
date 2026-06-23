@@ -25,6 +25,7 @@ type NotifyLevel = "all" | "medium" | "low" | "disabled";
 
 interface RunState {
 	startedAt: number;
+	isPiSubagent: boolean;
 	readFiles: Set<string>;
 	changedFiles: Set<string>;
 	searchCount: number;
@@ -345,9 +346,18 @@ function shouldNotifyToolStart(level: NotifyLevel): boolean {
 	return level !== "disabled";
 }
 
-function createEmptyRunState(): RunState {
+function isPiSubagentSystemPrompt(systemPrompt: string): boolean {
+	const hasActiveAgentTag = /<active_agent\b[^>]*\bname=(["'])[^"']+\1[^>]*\/?>/i.test(systemPrompt);
+	const hasSubagentContext = systemPrompt.includes("<sub_agent_context>");
+	const hasSubagentWording = /pi coding agent sub-agent/i.test(systemPrompt) ||
+		/operating as a sub-agent/i.test(systemPrompt);
+	return (hasActiveAgentTag && hasSubagentContext) || hasSubagentWording;
+}
+
+function createEmptyRunState(isPiSubagent = false): RunState {
 	return {
 		startedAt: Date.now(),
+		isPiSubagent,
 		readFiles: new Set<string>(),
 		changedFiles: new Set<string>(),
 		searchCount: 0,
@@ -365,6 +375,7 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	const notifyTools = loadConfiguredNotifyTools(process.cwd());
 
 	let runState = createEmptyRunState();
+	let pendingIsPiSubagent = false;
 	let lastNotificationAt = 0;
 	let lastNotificationKey = "";
 	let cmuxUnavailable = false;
@@ -398,8 +409,13 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 		return { ok: true };
 	};
 
+	pi.on("before_agent_start", async (event) => {
+		pendingIsPiSubagent = isPiSubagentSystemPrompt(event.systemPrompt);
+	});
+
 	pi.on("agent_start", async () => {
-		runState = createEmptyRunState();
+		runState = createEmptyRunState(pendingIsPiSubagent);
+		pendingIsPiSubagent = false;
 	});
 
 	pi.on("tool_execution_start", async (event) => {
@@ -441,6 +457,10 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", async (event) => {
+		if (runState.isPiSubagent) {
+			return;
+		}
+
 		const durationMs = Date.now() - runState.startedAt;
 		const runError = summarizeRunError(event.messages, runState.firstToolError);
 		const subtitle = buildSubtitle(Boolean(runError), runState, durationMs, thresholdMs);

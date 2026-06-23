@@ -4,7 +4,9 @@ Detailed usage for the cmux integrations bundled with `pi-cmux`.
 
 ## Notifications
 
-`cmux-notify` sends `cmux notify` alerts when Pi finishes a run.
+`cmux-notify` sends `cmux notify` alerts when the main Pi agent finishes a run.
+
+Detected `pi-subagents` subagents skip final-run `Waiting`, `Task Complete`, and `Error` notifications. Configured tool-start notifications are unaffected.
 
 Notification fields:
 - title: `Pi` by default
@@ -49,7 +51,9 @@ Supported locations:
 - `~/.pi/agent/settings.json` for global tool notifications
 - `.pi/settings.json` for project-local tool notifications
 
-When a configured tool starts, `cmux-notify` sends a notification. `PI_CMUX_NOTIFY_LEVEL=disabled` disables both final-run notifications and configured tool-start notifications.
+When a configured tool starts, `cmux-notify` requests a notification; duplicate identical tool-start notifications may be debounced. `PI_CMUX_NOTIFY_LEVEL=disabled` disables both final-run notifications and configured tool-start notifications.
+
+Subagent final-run suppression does not affect configured tool-start notifications, including tools started while a detected `pi-subagents` subagent is running.
 
 Project settings load after global settings. Set a project entry to `{ "disabled": true }` to remove a global tool notification:
 
