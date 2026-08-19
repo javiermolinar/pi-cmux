@@ -141,7 +141,7 @@ function collectSurfaceRefs(panes: CmuxPaneInfo[]): Set<string> {
 	return refs;
 }
 
-async function execCmux(pi: ExtensionAPI, args: string[]): Promise<CmuxExecResult> {
+export async function execCmux(pi: ExtensionAPI, args: string[]): Promise<CmuxExecResult> {
 	const result = await pi.exec("cmux", args, { timeout: CMUX_TIMEOUT_MS });
 	if (result.killed) {
 		return {
@@ -166,7 +166,7 @@ async function execCmux(pi: ExtensionAPI, args: string[]): Promise<CmuxExecResul
 	};
 }
 
-async function getCallerInfo(pi: ExtensionAPI): Promise<{ ok: true; caller: CmuxCallerContext } | { ok: false; error: string }> {
+export async function getCallerInfo(pi: ExtensionAPI): Promise<{ ok: true; caller: CmuxCallerContext } | { ok: false; error: string }> {
 	const result = await execCmux(pi, ["--json", "identify"]);
 	if (!result.ok) {
 		return { ok: false, error: result.error || "Failed to identify cmux caller" };

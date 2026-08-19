@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Added opt-in conversation tab titles (`PI_CMUX_AUTOTITLE=1`): after the first agent turn, the current cmux tab is renamed to a short topic title summarized by a headless `pi --print --no-tools` run. Tab-only (never renames the workspace), `/name` wins, `/new` resets. `PI_CMUX_AUTOTITLE_MODEL` selects the summarizer model.
+
 ## [0.1.16] - 2026-05-27
 
 ### Added

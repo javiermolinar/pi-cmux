@@ -6,6 +6,7 @@ import cmuxReviewExtension from "./cmux-review.ts";
 import cmuxContinueExtension from "./cmux-continue.ts";
 import cmuxOpenExtension from "./cmux-open.ts";
 import cmuxSidebarExtension from "./cmux-sidebar.ts";
+import cmuxAutotitleExtension from "./cmux-autotitle.ts";
 import { initI18n } from "./i18n.ts";
 
 export default function piCmuxExtensionBundle(pi: ExtensionAPI) {
@@ -17,4 +18,5 @@ export default function piCmuxExtensionBundle(pi: ExtensionAPI) {
 	cmuxContinueExtension(pi);
 	cmuxOpenExtension(pi);
 	cmuxSidebarExtension(pi);
+	cmuxAutotitleExtension(pi);
 }
