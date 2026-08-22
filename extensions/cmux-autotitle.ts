@@ -1,5 +1,8 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { completeSimple } from "@earendil-works/pi-ai/compat";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { execCmux, formatTabTitle, getCallerInfo } from "./cmux-core.ts";
 
 // Opt-in conversation-driven tab titles.
@@ -10,7 +13,8 @@ import { execCmux, formatTabTitle, getCallerInfo } from "./cmux-core.ts";
 // built-in workspace auto-naming (which is skipped for workspaces with a
 // user-set name and always renames the workspace itself).
 //
-// Disabled by default; enable with PI_CMUX_AUTOTITLE=1.
+// Disabled by default; enable with PI_CMUX_AUTOTITLE=1 or
+// `"pi-cmux": { "autotitle": true }` in Pi settings.
 //
 // The summarizer deliberately does NOT spawn a headless `pi --print` child:
 // - A child writes a real session file, polluting `pi -r`.
@@ -55,7 +59,28 @@ function getBooleanFromEnv(name: string, fallback: boolean): boolean {
 }
 
 function isAutotitleEnabled(): boolean {
-	return getBooleanFromEnv("PI_CMUX_AUTOTITLE", false);
+	if (getBooleanFromEnv("PI_CMUX_AUTOTITLE", false)) return true;
+	return readAutotitleSetting();
+}
+
+// `"pi-cmux": { "autotitle": true }` in ~/.pi/agent/settings.json or
+// <cwd>/.pi/settings.json - the same settings pattern `pi-cmux.commands`
+// uses. Project-local wins over the global file. A bad file or section is
+// ignored (falls back to disabled), never fatal.
+function readAutotitleSetting(): boolean {
+	for (const settingsPath of [join(homedir(), ".pi", "agent", "settings.json"), join(process.cwd(), ".pi", "settings.json")]) {
+		try {
+			if (!existsSync(settingsPath)) continue;
+			const parsed = JSON.parse(readFileSync(settingsPath, "utf8")) as Record<string, unknown> | null;
+			const section = parsed?.["pi-cmux"];
+			if (!section || typeof section !== "object" || Array.isArray(section)) continue;
+			const value = (section as { autotitle?: unknown }).autotitle;
+			if (typeof value === "boolean") return value;
+		} catch {
+			// Ignore unreadable settings files.
+		}
+	}
+	return false;
 }
 
 function isInteractive(ctx: ExtensionContext): boolean {
