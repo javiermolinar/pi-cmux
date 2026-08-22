@@ -1,30 +1,39 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { spawn } from "node:child_process";
+import { completeSimple } from "@earendil-works/pi-ai/compat";
 import { execCmux, formatTabTitle, getCallerInfo } from "./cmux-core.ts";
 
 // Opt-in conversation-driven tab titles.
 //
 // After the first agent turn of a conversation, summarize the session into a
-// short topic title with a headless `pi --print --no-tools` run and rename the
-// current cmux tab. Workspace names are never touched, so this complements
-// cmux's built-in workspace auto-naming (which is skipped for workspaces with
-// a user-set name and always renames the workspace itself).
+// short topic title with a single in-process LLM call and rename the current
+// cmux tab. Workspace names are never touched, so this complements cmux's
+// built-in workspace auto-naming (which is skipped for workspaces with a
+// user-set name and always renames the workspace itself).
 //
 // Disabled by default; enable with PI_CMUX_AUTOTITLE=1.
 //
-// Three guards keep the headless summarizer safe (all verified the hard way):
-// - Headless children (`pi --print`) load this package too; the ctx.mode gate
-//   keeps them from re-entering the naming pass (infinite recursion).
-// - The child env drops CMUX_SURFACE_ID/CMUX_TAB_ID/CMUX_PANEL_ID and sets
-//   CMUX_PI_HOOKS_DISABLED=1, so it neither re-enters cmux hooks (notification
-//   storms) nor resolves to this surface.
-// - Headless pi waits for stdin EOF, so the child stdin must be ignored or it
-//   hangs until the timeout with empty output.
+// The summarizer deliberately does NOT spawn a headless `pi --print` child:
+// - A child writes a real session file, polluting `pi -r`.
+// - A child loads this package (and cmux hooks) again, re-triggering cmux
+//   notifications for the naming pass itself.
+// - A child pays the full pi system prompt (AGENTS.md, skills, ...) in tokens.
+// Instead we reuse pi's own streaming entry point (`completeSimple` from
+// pi-ai, the same completeSummarization uses internally) with a compact
+// transcript and a short system prompt: one standalone request, no session
+// file, no tool definitions, no child process.
 
-const SUMMARIZE_TIMEOUT_MS = 90_000;
+const SUMMARIZE_TIMEOUT_MS = 60_000;
+const SUMMARIZE_MAX_TOKENS = 1024;
 const MAX_MESSAGE_CHARS = 1500;
 const MAX_CACHED_MESSAGES = 6;
 const MIN_MESSAGES_FOR_TITLE = 2;
+
+const TITLE_SYSTEM_PROMPT = [
+	"You write tab titles for a coding session.",
+	"Summarize the conversation into a short title of 2-5 words in the conversation's primary language.",
+	"Describe the user's concrete goal, not the act of chatting; if the conversation contains pasted logs or code, describe the underlying goal instead of quoting the content.",
+	"Reply with the title only: no quotes, no trailing punctuation, no explanation.",
+].join(" ");
 
 interface CachedMessage {
 	role: "user" | "assistant";
@@ -35,6 +44,7 @@ let conversationTitle: string | undefined;
 let hasCustomName = false;
 let recentMessages: CachedMessage[] = [];
 let namingInFlight = false;
+let namingAbort: AbortController | undefined;
 
 function getBooleanFromEnv(name: string, fallback: boolean): boolean {
 	const value = process.env[name]?.trim().toLowerCase();
@@ -49,7 +59,7 @@ function isAutotitleEnabled(): boolean {
 }
 
 function isInteractive(ctx: ExtensionContext): boolean {
-	// Headless children load this extension too; never run there.
+	// Only the interactive TUI owns a cmux tab worth renaming.
 	return ctx.mode === "tui";
 }
 
@@ -91,61 +101,78 @@ function lastAssistantText(event: unknown): string | undefined {
 	return undefined;
 }
 
-function buildSummarizePrompt(): string | undefined {
+function buildTranscript(): string | undefined {
 	if (recentMessages.length < MIN_MESSAGES_FOR_TITLE) return undefined;
-	const lines = recentMessages
+	return recentMessages
 		.slice(-MAX_CACHED_MESSAGES)
-		.map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${truncate(message.text, MAX_MESSAGE_CHARS)}`);
-	return [
-		"Summarize the conversation below into a short tab title of 2-5 words, written in the conversation's primary language.",
-		"Reply with the title only: no quotes, no trailing punctuation, no explanation.",
-		"If the conversation contains pasted logs or code, describe the underlying goal instead of quoting the content.",
-		"",
-		lines.join("\n"),
-	].join("\n");
+		.map((message) => `${message.role === "user" ? "User" : "Assistant"}: ${truncate(message.text, MAX_MESSAGE_CHARS)}`)
+		.join("\n");
 }
 
-function summarizeProcess(prompt: string, cwd: string): Promise<string> {
-	return new Promise((resolve) => {
-		// Sanitized environment: the headless child must not re-enter cmux hooks
-		// (notifications) or resolve to this surface.
-		const env: Record<string, string> = {};
-		for (const [key, value] of Object.entries(process.env)) {
-			if (value === undefined) continue;
-			if (key === "CMUX_SURFACE_ID" || key === "CMUX_TAB_ID" || key === "CMUX_PANEL_ID") continue;
-			env[key] = value;
-		}
-		env.CMUX_PI_HOOKS_DISABLED = "1";
+type SessionModel = NonNullable<ExtensionContext["model"]>;
 
-		let stdout = "";
-		let settled = false;
-		const finish = (): void => {
-			if (settled) return;
-			settled = true;
-			resolve(stdout);
-		};
+// Resolve PI_CMUX_AUTOTITLE_MODEL ("provider/model" or a bare model id)
+// against the session's model registry; fall back to the current model.
+function resolveSummarizerModel(ctx: ExtensionContext): SessionModel | undefined {
+	const requested = process.env.PI_CMUX_AUTOTITLE_MODEL?.trim();
+	if (!requested) return ctx.model ?? undefined;
+	const separator = requested.indexOf("/");
+	if (separator > 0) {
+		const provider = requested.slice(0, separator);
+		const modelId = requested.slice(separator + 1);
+		return ctx.modelRegistry.find(provider, modelId) ?? ctx.model ?? undefined;
+	}
+	for (const candidate of ctx.modelRegistry.getAvailable()) {
+		if (candidate.id === requested) return candidate;
+	}
+	return ctx.model ?? undefined;
+}
 
-		try {
-			const model = process.env.PI_CMUX_AUTOTITLE_MODEL?.trim();
-			const args = ["--print", "--no-tools"];
-			if (model) args.push("--model", model);
-			args.push(prompt);
-			const child = spawn("pi", args, {
-				cwd,
-				env,
-				timeout: SUMMARIZE_TIMEOUT_MS,
-				// Headless pi waits for stdin EOF unless it is closed explicitly.
-				stdio: ["ignore", "pipe", "pipe"],
-			});
-			child.stdout?.on("data", (chunk: Buffer) => {
-				stdout += chunk.toString("utf8");
-			});
-			child.on("error", () => finish());
-			child.on("close", () => finish());
-		} catch {
-			finish();
+// One standalone LLM call inside the pi process: no child session file, no
+// re-loaded extensions, no tool schemas, no full pi system prompt.
+async function summarizeInProcess(transcript: string, ctx: ExtensionContext): Promise<string | undefined> {
+	const model = resolveSummarizerModel(ctx);
+	if (!model) return undefined;
+
+	const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
+	if (!auth.ok) return undefined;
+
+	const controller = new AbortController();
+	namingAbort = controller;
+	const timeout = setTimeout(() => controller.abort(), SUMMARIZE_TIMEOUT_MS);
+	try {
+		const message = await completeSimple(
+			model,
+			{
+				systemPrompt: TITLE_SYSTEM_PROMPT,
+				messages: [{ role: "user", content: transcript, timestamp: Date.now() }],
+			},
+			{
+				maxTokens: SUMMARIZE_MAX_TOKENS,
+				signal: controller.signal,
+				apiKey: auth.apiKey,
+				headers: auth.headers,
+				env: auth.env,
+				cacheRetention: "none",
+			},
+		);
+		const parts: string[] = [];
+		if (Array.isArray(message?.content)) {
+			for (const block of message.content) {
+				if ((block as { type?: unknown }).type === "text") {
+					const text = (block as { text?: unknown }).text;
+					if (typeof text === "string" && text.trim()) parts.push(text.trim());
+				}
+			}
 		}
-	});
+		// Models occasionally wrap the title in a fence, quotes, or a "Title:" label.
+		return parts.join("\n").trim() || undefined;
+	} catch {
+		return undefined;
+	} finally {
+		clearTimeout(timeout);
+		if (namingAbort === controller) namingAbort = undefined;
+	}
 }
 
 async function renameTab(pi: ExtensionAPI, title: string): Promise<void> {
@@ -164,11 +191,11 @@ async function renameTab(pi: ExtensionAPI, title: string): Promise<void> {
 }
 
 async function runNamingPass(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
-	const prompt = buildSummarizePrompt();
-	if (!prompt) return;
+	const transcript = buildTranscript();
+	if (!transcript) return;
 
-	const raw = await summarizeProcess(prompt, ctx.cwd);
-	const title = raw.trim() ? sanitizeTitle(raw) : undefined;
+	const raw = await summarizeInProcess(transcript, ctx);
+	const title = raw ? sanitizeTitle(raw) : undefined;
 	if (!title) return;
 
 	conversationTitle = title;
@@ -196,6 +223,8 @@ export default function cmuxAutotitleExtension(pi: ExtensionAPI): void {
 
 	pi.on("before_agent_start", async (event, ctx) => {
 		if (!isInteractive(ctx)) return;
+		// The user moved on: don't let a stale naming pass rename the tab late.
+		namingAbort?.abort();
 		const prompt = (event as { prompt?: string } | undefined)?.prompt?.trim();
 		if (prompt) recentMessages.push({ role: "user", text: prompt });
 	});
