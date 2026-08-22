@@ -25,7 +25,7 @@ import { execCmux, formatTabTitle, getCallerInfo } from "./cmux-core.ts";
 const SUMMARIZE_TIMEOUT_MS = 60_000;
 const SUMMARIZE_MAX_TOKENS = 1024;
 const MAX_MESSAGE_CHARS = 300;
-const MAX_CACHED_MESSAGES = 3;
+const MAX_CACHED_MESSAGES = 4;
 const MIN_MESSAGES_FOR_TITLE = 2;
 
 const TITLE_SYSTEM_PROMPT = [
