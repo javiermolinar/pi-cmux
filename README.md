@@ -72,10 +72,10 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 | `PI_CMUX_SIDEBAR_TOKENS` | `1` | Include compact live cumulative session token counts in sidebar progress and summaries. |
 | `PI_CMUX_SIDEBAR_COST` | `0` | Include reported model cost alongside token counts. |
 | `PI_CMUX_SIDEBAR_LOG_TOOLS` | `0` | Set `1` to log every tool result. |
-| `PI_CMUX_AUTOTITLE` | `0` | Set `1` to name the current cmux tab after the conversation. Can also be enabled via `"pi-cmux": { "autotitle": true }` in Pi settings (project-local `.pi/settings.json` wins over the global file). |
+| `PI_CMUX_AUTOTITLE_DISABLED` | `0` | Set `1` to opt out of naming the current cmux tab after the conversation. Can also be disabled via `"pi-cmux": { "autotitle": false }` in Pi settings (project-local `.pi/settings.json` wins over the global file). Enabled by default. |
 | `PI_CMUX_AUTOTITLE_MODEL` | *(pi default)* | Model used by the in-process summarizer, e.g. `glm-5.3` or `anthropic/claude-haiku-4-5`. |
 
-With `PI_CMUX_AUTOTITLE=1`, the first agent turn of each conversation renames the current cmux tab to a 2-5 word topic title summarized by a single in-process LLM call (a compact transcript with a short system prompt - no headless `pi --print` child, so nothing is added to `pi -r`, no extra cmux notifications fire, and only the small transcript is sent). Only the tab is renamed - never the workspace - so it stays usable alongside cmux's built-in workspace auto-naming. `/name` overrides the automatic title, and `/new` clears it for the next conversation.
+Tab titles are on by default: the first agent turn of each conversation renames the current cmux tab to a 2-5 word topic title summarized by a single in-process LLM call (a compact transcript with a short system prompt - no headless `pi --print` child, so nothing is added to `pi -r`, no extra cmux notifications fire, and only the small transcript is sent). Only the tab is renamed - never the workspace - so it stays usable alongside cmux's built-in workspace auto-naming. `/name` overrides the automatic title, and `/new` clears it for the next conversation. Opt out with `PI_CMUX_AUTOTITLE_DISABLED=1` or `"pi-cmux": { "autotitle": false }`.
 
 Custom split shortcuts can be registered under `pi-cmux.commands` in `~/.pi/agent/settings.json` or `.pi/settings.json`; see [docs/usage.md](docs/usage.md#pluggable-tool-commands).
 

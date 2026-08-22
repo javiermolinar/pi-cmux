@@ -13,8 +13,9 @@ import { execCmux, formatTabTitle, getCallerInfo } from "./cmux-core.ts";
 // built-in workspace auto-naming (which is skipped for workspaces with a
 // user-set name and always renames the workspace itself).
 //
-// Disabled by default; enable with PI_CMUX_AUTOTITLE=1 or
-// `"pi-cmux": { "autotitle": true }` in Pi settings.
+// Disabled by default? No - enabled by default. Opt out with
+// PI_CMUX_AUTOTITLE_DISABLED=1 or `"pi-cmux": { "autotitle": false }` in Pi
+// settings. (PI_CMUX_AUTOTITLE=1 is still accepted as a no-op-style force-on.)
 //
 // The summarizer deliberately does NOT spawn a headless `pi --print` child:
 // - A child writes a real session file, polluting `pi -r`.
@@ -60,14 +61,16 @@ function getBooleanFromEnv(name: string, fallback: boolean): boolean {
 
 function isAutotitleEnabled(): boolean {
 	if (getBooleanFromEnv("PI_CMUX_AUTOTITLE", false)) return true;
-	return readAutotitleSetting();
+	if (getBooleanFromEnv("PI_CMUX_AUTOTITLE_DISABLED", false)) return false;
+	return readAutotitleSetting(true);
 }
 
-// `"pi-cmux": { "autotitle": true }` in ~/.pi/agent/settings.json or
+// `"pi-cmux": { "autotitle": false }` in ~/.pi/agent/settings.json or
 // <cwd>/.pi/settings.json - the same settings pattern `pi-cmux.commands`
 // uses. Project-local wins over the global file. A bad file or section is
-// ignored (falls back to disabled), never fatal.
-function readAutotitleSetting(): boolean {
+// ignored, never fatal. Defaults to `defaultEnabled` (on, unless the
+// disabled env var is set).
+function readAutotitleSetting(defaultEnabled: boolean): boolean {
 	for (const settingsPath of [join(homedir(), ".pi", "agent", "settings.json"), join(process.cwd(), ".pi", "settings.json")]) {
 		try {
 			if (!existsSync(settingsPath)) continue;
@@ -80,7 +83,7 @@ function readAutotitleSetting(): boolean {
 			// Ignore unreadable settings files.
 		}
 	}
-	return false;
+	return defaultEnabled;
 }
 
 function isInteractive(ctx: ExtensionContext): boolean {

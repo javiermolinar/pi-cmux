@@ -4,7 +4,7 @@
 
 ### Added
 
-- Added opt-in conversation tab titles (`PI_CMUX_AUTOTITLE=1`): after the first agent turn, the current cmux tab is renamed to a short topic title summarized by a single in-process LLM call (compact transcript, short system prompt; no headless `pi` child, so no `pi -r` entries, no extra cmux notifications, and minimal token usage). Tab-only (never renames the workspace), `/name` wins, `/new` resets. `PI_CMUX_AUTOTITLE_MODEL` selects the summarizer model.
+- Added conversation tab titles (on by default; opt out with `PI_CMUX_AUTOTITLE_DISABLED=1` or `"pi-cmux": { "autotitle": false }`): after the first agent turn, the current cmux tab is renamed to a short topic title summarized by a single in-process LLM call (compact transcript, short system prompt; no headless `pi` child, so no `pi -r` entries, no extra cmux notifications, and minimal token usage). Tab-only (never renames the workspace), `/name` wins, `/new` resets. `PI_CMUX_AUTOTITLE_MODEL` selects the summarizer model.
 - Dev dependency `@earendil-works/pi-coding-agent` bumped to 0.83.0 (with `@earendil-works/pi-ai` for the streaming API) to match current pi.
 
 ## [0.1.16] - 2026-05-27
