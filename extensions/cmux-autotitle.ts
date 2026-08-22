@@ -24,7 +24,7 @@ import { execCmux, formatTabTitle, getCallerInfo } from "./cmux-core.ts";
 
 const SUMMARIZE_TIMEOUT_MS = 60_000;
 const SUMMARIZE_MAX_TOKENS = 1024;
-const MAX_MESSAGE_CHARS = 1500;
+const MAX_MESSAGE_CHARS = 300;
 const MAX_CACHED_MESSAGES = 6;
 const MIN_MESSAGES_FOR_TITLE = 2;
 
@@ -65,7 +65,13 @@ function isInteractive(ctx: ExtensionContext): boolean {
 
 function truncate(value: string, max: number): string {
 	const trimmed = value.replace(/\s+/g, " ").trim();
-	return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}...`;
+	if (trimmed.length <= max) return trimmed;
+	// Keep the head and the tail: important content tends to sit at the start
+	// (the request, the error) and the end (the outcome, the question) of a
+	// message, while the middle is usually detail.
+	const head = Math.ceil(max * 0.6);
+	const tail = Math.floor(max * 0.4) - 1; // minus the ellipsis
+	return `${trimmed.slice(0, head)}…${trimmed.slice(-tail)}`;
 }
 
 function sanitizeTitle(raw: string): string | undefined {
