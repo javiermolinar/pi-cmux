@@ -22,6 +22,7 @@ async function createHarness(t, { global = {}, project = {}, env = {}, mode = "t
 	for (const [name, value] of Object.entries({
 		PI_CODING_AGENT_DIR: agentDir,
 		PI_CMUX_NOTIFY_LEVEL: "all",
+		PI_CMUX_NOTIFY_FORCE: undefined,
 		PI_CMUX_NOTIFY_DEBOUNCE_MS: "0",
 		PI_CMUX_NOTIFY_TITLE: "Pi",
 		CMUX_SURFACE_ID: "surface:test",
@@ -119,6 +120,18 @@ for (const panel of [undefined, "panel:test"]) {
 		const h = await createHarness(t, { project: settings({ read: true }), env: { CMUX_SURFACE_ID: undefined, CMUX_PANEL_ID: panel } });
 		await h.start("read");
 		assert.equal(h.calls.length, panel ? 1 : 0);
+	});
+}
+
+for (const [level, expected] of [[undefined, 0], ["disabled", 0], ["all", 1], ["low", 1]]) {
+	test(`forced tool notifications in headless mode still honor level ${String(level)}`, async (t) => {
+		const h = await createHarness(t, {
+			mode: "print", project: settings({ read: true }),
+			env: { PI_CMUX_NOTIFY_LEVEL: level, PI_CMUX_NOTIFY_FORCE: "1", CMUX_SURFACE_ID: undefined },
+		});
+		await h.start("write");
+		await h.start("read");
+		assert.equal(h.calls.length, expected);
 	});
 }
 

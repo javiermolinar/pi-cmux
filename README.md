@@ -54,7 +54,7 @@ Package notifications are opt-in to avoid duplicating native hook notifications.
 
 | Workflow | Commands | Summary |
 |---|---|---|
-| Notifications | opt-in | Set `PI_CMUX_NOTIFY_LEVEL=all` to send `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. |
+| Notifications | opt-in | Set `PI_CMUX_NOTIFY_LEVEL=all` to send `cmux notify` once Pi settles after retries, compaction, and queued follow-ups. Only notifies from interactive Pi inside cmux unless forced. |
 | Sidebar status/log | automatic | Updates cmux status, progress, and logs while Pi runs, then flashes once Pi settles. |
 | New sidebar chat | `/cmn <prompt>` | Starts a fresh Pi chat in a named workspace in the left sidebar. |
 | Split Pi | `/cmv [prompt]`, `/cmh [prompt]` | Opens a new right/lower split with Pi in the same project. |
@@ -90,6 +90,7 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 | Variable | Default | Purpose |
 |---|---:|---|
 | `PI_CMUX_NOTIFY_LEVEL` | `disabled` | Opt in with `all`, `medium`, or `low`; leave disabled when using native hook notifications. |
+| `PI_CMUX_NOTIFY_FORCE` | `0` | Set `1` to allow final-run and configured tool-start notifications outside interactive cmux sessions. Does not override the notification level. |
 | `PI_CMUX_NOTIFY_INCLUDE_RESPONSE` | `0` | Append truncated final assistant response to non-error notifications. |
 | `PI_CMUX_NOTIFY_THRESHOLD_MS` | `15000` | Duration threshold for `Task Complete` vs `Waiting`. |
 | `PI_CMUX_SIDEBAR` | `1` | Set `0` to disable sidebar integration. |
@@ -120,7 +121,7 @@ Example tool notification settings:
 }
 ```
 
-Set `PI_CMUX_NOTIFY_LEVEL=all`, `medium`, or `low` to enable notifications too; the default `disabled` suppresses both final-run and tool-start notifications. Configured tools notify at any enabled level, only while Pi runs interactively inside a cmux surface. Run `/reload` after changing settings.
+Set `PI_CMUX_NOTIFY_LEVEL=all`, `medium`, or `low` to enable notifications too; the default `disabled` suppresses both final-run and tool-start notifications. Configured tools notify at any enabled level, only while Pi runs interactively inside a cmux surface unless `PI_CMUX_NOTIFY_FORCE=1`. Run `/reload` after changing settings.
 
 Example Hunk review shortcut:
 

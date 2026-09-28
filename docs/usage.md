@@ -6,7 +6,9 @@ Detailed usage for the cmux integrations bundled with `pi-cmux`.
 
 `cmux-notify` is disabled by default. Opt in by setting `PI_CMUX_NOTIFY_LEVEL=all` in Pi's environment, then restart Pi or run `/reload`. Leave it disabled when using native cmux hook notifications to avoid duplicate alerts.
 
-When enabled, it sends `cmux notify` alerts once Pi fully settles, after automatic retries, compaction retries, and queued follow-up messages.
+When enabled, it sends `cmux notify` alerts once Pi fully settles, after automatic retries, compaction retries, and queued follow-up messages. By default, final-run and configured tool-start notifications only fire from interactive Pi inside a cmux surface (`CMUX_SURFACE_ID` or legacy `CMUX_PANEL_ID`). Headless/embedded runs (SDK, `--print`, JSON, RPC) stay silent even if they inherit cmux variables, as do terminals outside cmux.
+
+Set `PI_CMUX_NOTIFY_FORCE=1` to bypass the mode/surface guard for both notification types. You must still enable `PI_CMUX_NOTIFY_LEVEL`; force does not override `disabled`, final-run severity filtering, or the configured tool list.
 
 Notification fields:
 - title: `Pi` by default
@@ -51,7 +53,7 @@ Supported locations:
 - `~/.pi/agent/settings.json` for global tool notifications (or `$PI_CODING_AGENT_DIR/settings.json` when configured)
 - `.pi/settings.json` under the session's working directory for project-local tool notifications
 
-Also set `PI_CMUX_NOTIFY_LEVEL=all`, `medium`, or `low`; the default `disabled` suppresses both final-run and tool-start notifications. Configured tools notify at any enabled level, independently of the final-run severity filter. Tool-start notifications only run in interactive Pi inside a cmux surface (`CMUX_SURFACE_ID` or legacy `CMUX_PANEL_ID`); headless runs with inherited cmux variables stay silent. Notification bodies contain the tool name and, when present, the path basename—not the other tool arguments.
+Also set `PI_CMUX_NOTIFY_LEVEL=all`, `medium`, or `low`; the default `disabled` suppresses both final-run and tool-start notifications. Configured tools notify at any enabled level, independently of the final-run severity filter. Tool-start notifications only run in interactive Pi inside a cmux surface (`CMUX_SURFACE_ID` or legacy `CMUX_PANEL_ID`); headless runs with inherited cmux variables stay silent unless `PI_CMUX_NOTIFY_FORCE=1`. Notification bodies contain the tool name and, when present, the path basename—not the other tool arguments.
 
 Project settings load after global settings. Set a project entry to `{ "disabled": true }` to remove a global tool notification:
 
@@ -389,6 +391,7 @@ The former `/cmrv`, `/cmrh`, `/review-v`, and `/review-h` commands are no longer
 
 ```bash
 PI_CMUX_NOTIFY_LEVEL=all|medium|low|disabled
+PI_CMUX_NOTIFY_FORCE=0|1
 PI_CMUX_NOTIFY_THRESHOLD_MS=15000
 PI_CMUX_NOTIFY_DEBOUNCE_MS=3000
 PI_CMUX_NOTIFY_TITLE=Pi

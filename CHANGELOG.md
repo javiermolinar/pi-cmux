@@ -17,6 +17,7 @@
 
 ### Fixed
 
+- Final-run and configured tool-start notifications now share an interactive cmux guard (`ctx.mode === "tui"` and `CMUX_SURFACE_ID`/`CMUX_PANEL_ID`). Headless/embedded runs and terminals outside cmux stay silent even when the cmux socket is reachable. `PI_CMUX_NOTIFY_FORCE=1` bypasses this guard, but notifications remain opt-in and still respect `PI_CMUX_NOTIFY_LEVEL`.
 - Browser closure now cancels pending annotation approvals and removes stale bindings quietly through a session-scoped cmux event listener. Initial/reconnect inventory checks retry with bounded backoff, and annotation target checks also cover missed events. Malformed surface types remain verification errors rather than removing bindings; other verification failures report their reason instead of claiming drafts remain in a closed page.
 - Create sidebar workspaces with `cmux --json workspace create`: cmux 0.64.25's legacy `new-workspace` ignores `--json`, leaving a workspace open without launching Pi. Preserve caller-window targeting, focus, and fail-closed handling without automatic creation retries. Added regression tests and opt-in installed-CLI contract tests against an isolated fake socket.
 - Correct the no-login-profile guarantee: cmux 0.64.25 wraps `respawn-pane` commands in `/bin/sh -lc`. The command prefix restores the caller's `PATH`, but cannot prevent login-profile side effects. Launch semantics are unchanged.

@@ -31,8 +31,9 @@ function createHarness(extension) {
 	};
 }
 
-function createContext(idle = true) {
+function createContext(idle = true, mode = "tui") {
 	return {
+		mode,
 		isIdle: () => idle,
 		sessionManager: {
 			getBranch: () => [],
@@ -42,7 +43,12 @@ function createContext(idle = true) {
 
 async function withEnvironment(overrides, callback) {
 	const previous = new Map();
-	for (const [name, value] of Object.entries(overrides)) {
+	for (const [name, value] of Object.entries({
+		PI_CMUX_NOTIFY_FORCE: undefined,
+		CMUX_SURFACE_ID: undefined,
+		CMUX_PANEL_ID: undefined,
+		...overrides,
+	})) {
 		previous.set(name, process.env[name]);
 		if (value === undefined) delete process.env[name];
 		else process.env[name] = value;
@@ -97,6 +103,7 @@ for (const [level, expectedSubtitles] of [
 		await withEnvironment(
 			{
 				PI_CMUX_NOTIFY_LEVEL: level,
+				CMUX_SURFACE_ID: "test-surface",
 				PI_CMUX_NOTIFY_DEBOUNCE_MS: "0",
 				PI_CMUX_NOTIFY_THRESHOLD_MS: "999999",
 			},
@@ -127,6 +134,7 @@ test("notifications wait for idle settlement and use the final low-level result"
 			PI_CMUX_NOTIFY_INCLUDE_RESPONSE: "1",
 			PI_CMUX_NOTIFY_LEVEL: "all",
 			PI_CMUX_NOTIFY_THRESHOLD_MS: "999999",
+			CMUX_SURFACE_ID: "test-surface",
 		},
 		async () => {
 			const harness = createHarness(cmuxNotifyExtension);
@@ -160,6 +168,98 @@ test("notifications wait for idle settlement and use the final low-level result"
 			assert.equal(cmuxCalls(harness.execCalls, "notify").length, 1);
 		},
 	);
+});
+
+test("notifications stay silent outside cmux surfaces", async () => {
+	await withEnvironment(
+		{
+			PI_CMUX_NOTIFY_DEBOUNCE_MS: "0",
+			PI_CMUX_NOTIFY_LEVEL: "all",
+			CMUX_SURFACE_ID: undefined,
+			CMUX_PANEL_ID: undefined,
+		},
+		async () => {
+			const harness = createHarness(cmuxNotifyExtension);
+			const succeeded = assistantMessage("stop", "Done");
+
+			// Headless/embedded modes (SDK, --print, JSON, RPC) stay silent.
+			for (const mode of ["print", "json", "rpc", "sdk"]) {
+				await harness.emit("agent_start", { type: "agent_start" }, createContext(true, mode));
+				await harness.emit("tool_result", editResult("/repo/headless.ts"), createContext(true, mode));
+				await harness.emit("agent_end", { type: "agent_end", messages: [succeeded] });
+				await harness.emit("agent_settled", { type: "agent_settled" }, createContext(true, mode));
+				assert.equal(cmuxCalls(harness.execCalls, "notify").length, 0, `mode=${mode} should not notify`);
+			}
+
+			// Interactive TUI in a terminal outside cmux (no surface/panel env) stays silent too.
+			await harness.emit("agent_start", { type: "agent_start" }, createContext(true, "tui"));
+			await harness.emit("agent_end", { type: "agent_end", messages: [succeeded] });
+			await harness.emit("agent_settled", { type: "agent_settled" }, createContext(true, "tui"));
+			assert.equal(cmuxCalls(harness.execCalls, "notify").length, 0);
+		},
+	);
+});
+
+test("PI_CMUX_NOTIFY_FORCE restores notifications outside cmux surfaces", async () => {
+	await withEnvironment(
+		{
+			PI_CMUX_NOTIFY_DEBOUNCE_MS: "0",
+			PI_CMUX_NOTIFY_LEVEL: "all",
+			PI_CMUX_NOTIFY_FORCE: "1",
+			CMUX_SURFACE_ID: undefined,
+			CMUX_PANEL_ID: undefined,
+		},
+		async () => {
+			const harness = createHarness(cmuxNotifyExtension);
+			const succeeded = assistantMessage("stop", "Done");
+
+			await harness.emit("agent_start", { type: "agent_start" }, createContext(true, "print"));
+			await harness.emit("agent_end", { type: "agent_end", messages: [succeeded] });
+			await harness.emit("agent_settled", { type: "agent_settled" }, createContext(true, "print"));
+			assert.equal(cmuxCalls(harness.execCalls, "notify").length, 1);
+		},
+	);
+});
+
+for (const mode of ["tui", "print", "json", "rpc", "sdk"]) {
+	for (const source of ["CMUX_SURFACE_ID", "CMUX_PANEL_ID"]) {
+		test(`${mode} notifications with inherited ${source}`, async () => {
+			await withEnvironment({ [source]: "test-surface", PI_CMUX_NOTIFY_LEVEL: "all" }, async () => {
+				const h = createHarness(cmuxNotifyExtension);
+				const ctx = createContext(true, mode);
+				await h.emit("agent_start", {}, ctx);
+				await h.emit("tool_result", editResult("/repo/result.ts"), ctx);
+				await h.emit("agent_end", { messages: [assistantMessage("stop", "Done")] }, ctx);
+				await h.emit("agent_settled", {}, ctx);
+				const notifications = cmuxCalls(h.execCalls, "notify");
+				assert.equal(notifications.length, mode === "tui" ? 1 : 0);
+				if (mode === "tui") assert.equal(notifications[0].args.at(-1), "Updated result.ts");
+			});
+		});
+	}
+}
+
+for (const [level, expected] of [[undefined, 0], ["disabled", 0], ["all", 1], ["low", 0]]) {
+	test(`force preserves notification level ${String(level)}`, async () => {
+		await withEnvironment({ PI_CMUX_NOTIFY_FORCE: "1", PI_CMUX_NOTIFY_LEVEL: level }, async () => {
+			const h = createHarness(cmuxNotifyExtension);
+			const ctx = createContext(true, "rpc");
+			await h.emit("agent_start", {}, ctx);
+			await h.emit("agent_end", { messages: [assistantMessage("stop", "Done")] }, ctx);
+			await h.emit("agent_settled", {}, ctx);
+			assert.equal(cmuxCalls(h.execCalls, "notify").length, expected);
+		});
+	});
+}
+
+test("blank cmux surface identifiers do not enable notifications", async () => {
+	await withEnvironment({ CMUX_SURFACE_ID: " ", CMUX_PANEL_ID: "\t", PI_CMUX_NOTIFY_LEVEL: "all" }, async () => {
+		const h = createHarness(cmuxNotifyExtension);
+		await h.emit("agent_start");
+		await h.emit("agent_end", { messages: [assistantMessage("stop", "Done")] });
+		await h.emit("agent_settled");
+		assert.equal(cmuxCalls(h.execCalls, "notify").length, 0);
+	});
 });
 
 test("sidebar finalizes once after settlement and preserves retry activity", async () => {

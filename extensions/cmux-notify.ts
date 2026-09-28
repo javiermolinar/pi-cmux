@@ -1,4 +1,4 @@
-import type { AgentEndEvent, ExtensionAPI, ToolResultEvent } from "@earendil-works/pi-coding-agent";
+import type { AgentEndEvent, ExtensionAPI, ExtensionContext, ToolResultEvent } from "@earendil-works/pi-coding-agent";
 import {
 	getAgentDir,
 	isBashToolResult,
@@ -172,6 +172,17 @@ function getNotifyLevelFromEnv(): NotifyLevel {
 		return value;
 	}
 	return DEFAULT_NOTIFY_LEVEL;
+}
+
+/**
+ * Only notify when this Pi instance actually runs inside a cmux surface.
+ * Headless/embedded runs (SDK, print, JSON, RPC) and plain terminals must stay
+ * silent even though the cmux app (and its socket) is reachable.
+ */
+function canNotifyInContext(ctx: ExtensionContext): boolean {
+	if (process.env.PI_CMUX_NOTIFY_FORCE === "1") return true;
+	if (ctx.mode !== "tui") return false;
+	return Boolean(process.env.CMUX_SURFACE_ID?.trim() || process.env.CMUX_PANEL_ID?.trim());
 }
 
 function pluralize(count: number, singular: string, plural: string = `${singular}s`): string {
@@ -399,7 +410,8 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 		notifyTools = notifyLevel === "disabled" ? new Set() : loadConfiguredNotifyTools(ctx.cwd);
 	});
 
-	pi.on("agent_start", async () => {
+	pi.on("agent_start", async (_event, ctx) => {
+		if (!canNotifyInContext(ctx)) return;
 		if (logicalRunActive) return;
 		logicalRunActive = true;
 		pendingCompletionMessages = undefined;
@@ -407,8 +419,7 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("tool_execution_start", async (event, ctx) => {
-		// A reachable cmux socket does not imply this tool belongs to a cmux tab.
-		if (ctx.mode !== "tui" || !(process.env.CMUX_SURFACE_ID || process.env.CMUX_PANEL_ID)) return;
+		if (!canNotifyInContext(ctx)) return;
 		if (notifyLevel === "disabled" || !notifyTools.has(event.toolName)) {
 			return;
 		}
@@ -419,7 +430,8 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 		);
 	});
 
-	pi.on("tool_result", async (event) => {
+	pi.on("tool_result", async (event, ctx) => {
+		if (!canNotifyInContext(ctx)) return;
 		if (event.isError && !runState.firstToolError) {
 			runState.firstToolError = summarizeError(event);
 		}
@@ -451,6 +463,7 @@ export default function cmuxNotifyExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_settled", async (_event, ctx) => {
+		if (!canNotifyInContext(ctx)) return;
 		if (!ctx.isIdle() || !pendingCompletionMessages) return;
 
 		const messages = pendingCompletionMessages;
