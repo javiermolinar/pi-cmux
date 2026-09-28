@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.1.24] - 2026-09-28
+
 ### Changed
 
 - Refresh the README with a terminal-inspired banner, compatibility badges, a capabilities list, quick navigation, and clearer setup instructions around the existing screenshot.
