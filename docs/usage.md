@@ -96,9 +96,18 @@ Naming does not block lifecycle dispatch or settlement notifications. New turns,
 
 ## Sidebar status/log
 
-`cmux-sidebar` updates the cmux right sidebar while Pi runs. It only activates inside a cmux workspace (`CMUX_WORKSPACE_ID` is present).
+`cmux-sidebar` updates the cmux sidebar while Pi runs. It only activates inside a cmux workspace (`CMUX_WORKSPACE_ID` is present).
 
-It uses:
+Choose a mode with `PI_CMUX_SIDEBAR_MODE` before starting Pi:
+
+- `minimal`: the temporary Pi status with live cumulative session tokens on the same line (for example, `Pi thinking · tok ↑1.2k ↓300`), plus configured settlement flashes. Set `PI_CMUX_SIDEBAR_TOKENS=0` to hide tokens; cost remains opt-in via `PI_CMUX_SIDEBAR_COST=1`. Suppresses all package logs (including warnings and summaries) and progress, even when their individual flags are enabled. Error and cancelled statuses remain visible until the normal final-clear delay.
+- `detailed` (default): the existing status, progress, token counts, and logs, controlled by the individual flags below. Unknown or empty mode values fall back to `detailed`.
+
+For example, run `PI_CMUX_SIDEBAR_MODE=minimal pi`, or export the variable in your shell configuration for future sessions. Mode values ignore case and surrounding whitespace. If you change the environment outside Pi, restart Pi to inherit it.
+
+These modes only control `pi-cmux` output. They do not hide cmux's native prompt/response previews, activity row, branch, or path, and do not erase existing shared workspace logs. `PI_CMUX_SIDEBAR=0` disables this package's sidebar integration entirely; flash configuration remains independent of the mode.
+
+Detailed mode uses:
 - `cmux set-status` for a temporary Pi status pill while Pi is running, using tools, waiting, done, or errored
 - `cmux set-progress` for coarse run progress and live token counts while Pi is active
 - `cmux log` for run starts, changed files, warnings, final summaries, and compact session token counts, with cached input split out
@@ -108,6 +117,7 @@ Environment settings:
 
 ```bash
 PI_CMUX_SIDEBAR=0                    # disable sidebar integration
+PI_CMUX_SIDEBAR_MODE=minimal         # minimal | detailed (default)
 PI_CMUX_SIDEBAR_FLASH=all            # all | error | disabled
 PI_CMUX_SIDEBAR_LOG_TOOLS=1          # log every tool result
 PI_CMUX_SIDEBAR_LOG_PROMPT=1         # include truncated prompt in start log

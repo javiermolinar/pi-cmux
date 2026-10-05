@@ -15,7 +15,7 @@ const CMUX_SIDEBAR_TIMEOUT_MS = 1500;
 const MAX_LOG_LENGTH = 240;
 const MAX_PROMPT_LENGTH = 120;
 const DEFAULT_STATUS_PRIORITY = 80;
-const TOKEN_PROGRESS_UPDATE_MIN_MS = 500;
+const TOKEN_UPDATE_MIN_MS = 500;
 
 type StatusKind = "running" | "tool" | "waiting" | "complete" | "cancelled" | "error";
 type LogLevel = "info" | "progress" | "success" | "warning" | "error";
@@ -443,7 +443,8 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 		"PI_CMUX_SIDEBAR_COMPLETE_THRESHOLD_MS",
 		getNumberFromEnv("PI_CMUX_NOTIFY_THRESHOLD_MS", DEFAULT_COMPLETE_THRESHOLD_MS),
 	);
-	const progressEnabled = getBooleanFromEnv("PI_CMUX_SIDEBAR_PROGRESS", true);
+	const minimal = process.env.PI_CMUX_SIDEBAR_MODE?.trim().toLowerCase() === "minimal";
+	const progressEnabled = !minimal && getBooleanFromEnv("PI_CMUX_SIDEBAR_PROGRESS", true);
 	const tokenTrackingEnabled = getBooleanFromEnv("PI_CMUX_SIDEBAR_TOKENS", true);
 	const includeTokenCost = getBooleanFromEnv("PI_CMUX_SIDEBAR_COST", false);
 	const toolLogsEnabled = getBooleanFromEnv("PI_CMUX_SIDEBAR_LOG_TOOLS", false);
@@ -467,6 +468,8 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	let tokenRunTotals = createEmptyTokenTotals();
 	let liveAssistantUsage: TokenUsageLike | undefined;
 	let latestTokenSummary: string | undefined;
+	let currentStatus: { kind: StatusKind; value: string } | undefined;
+	let lastTokenStatusUpdateAt = 0;
 	let activeToolCount = 0;
 	let currentProgressValue: number | undefined;
 	let currentProgressLabel: string | undefined;
@@ -506,11 +509,13 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	};
 
 	const setStatus = (kind: StatusKind, value: string): void => {
+		currentStatus = { kind, value };
+		lastTokenStatusUpdateAt = Date.now();
 		const style = STATUS_STYLE[kind];
 		enqueueCmux([
 			"set-status",
 			statusKey,
-			value,
+			minimal && latestTokenSummary ? `${value} · ${latestTokenSummary}` : value,
 			"--icon",
 			style.icon,
 			"--color",
@@ -524,11 +529,13 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	};
 
 	const clearStatus = (): void => {
+		currentStatus = undefined;
 		// Follow the same owner as setStatus if the surface moves to another workspace.
 		enqueueCmux(["clear-status", statusKey, ...(panelId ? ["--panel", panelId] : [])]);
 	};
 
 	const appendLog = (level: LogLevel, message: string): void => {
+		if (minimal) return;
 		enqueueCmux(["log", "--level", level, "--source", source, "--", truncateText(message, MAX_LOG_LENGTH)]);
 	};
 
@@ -549,13 +556,16 @@ export default function cmuxSidebarExtension(pi: ExtensionAPI) {
 	const refreshProgressLabel = (force = false): void => {
 		if (!progressEnabled || currentProgressValue === undefined || currentProgressLabel === undefined) return;
 		const now = Date.now();
-		if (!force && now - lastTokenProgressUpdateAt < TOKEN_PROGRESS_UPDATE_MIN_MS) return;
+		if (!force && now - lastTokenProgressUpdateAt < TOKEN_UPDATE_MIN_MS) return;
 		lastTokenProgressUpdateAt = now;
 		enqueueCmux(["set-progress", progressValue(currentProgressValue), "--label", buildProgressLabel(currentProgressLabel)]);
 	};
 
 	const refreshTokenSummary = (force = false): void => {
 		updateLatestTokenSummary(getCurrentTokenTotals());
+		if (minimal && currentStatus && (force || Date.now() - lastTokenStatusUpdateAt >= TOKEN_UPDATE_MIN_MS)) {
+			setStatus(currentStatus.kind, currentStatus.value);
+		}
 		refreshProgressLabel(force);
 	};
 

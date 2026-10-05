@@ -94,14 +94,17 @@ Detailed command examples: [docs/usage.md](docs/usage.md).
 | `PI_CMUX_NOTIFY_INCLUDE_RESPONSE` | `0` | Append truncated final assistant response to non-error notifications. |
 | `PI_CMUX_NOTIFY_THRESHOLD_MS` | `15000` | Duration threshold for `Task Complete` vs `Waiting`. |
 | `PI_CMUX_SIDEBAR` | `1` | Set `0` to disable sidebar integration. |
+| `PI_CMUX_SIDEBAR_MODE` | `detailed` | `minimal` shows tokens on the package's temporary Pi status, plus configured flashes; `detailed` also enables progress and logs. Native cmux rows are unchanged. |
 | `PI_CMUX_SIDEBAR_FLASH` | `all` | `all`, `error`, or `disabled`. |
 | `PI_CMUX_SIDEBAR_PROGRESS` | `1` | Set `0` to disable sidebar progress updates. |
-| `PI_CMUX_SIDEBAR_TOKENS` | `1` | Include compact live cumulative session token counts in sidebar progress and summaries. |
+| `PI_CMUX_SIDEBAR_TOKENS` | `1` | Include compact live cumulative session token counts: on the status in minimal mode, or progress and summaries in detailed mode. |
 | `PI_CMUX_SIDEBAR_COST` | `0` | Include reported model cost alongside token counts. |
 | `PI_CMUX_SIDEBAR_LOG_TOOLS` | `0` | Set `1` to log every tool result. |
 | `PI_CMUX_AUTOTITLE` | `0` | Set `1` to enable conversation tab titles, or enable `"pi-cmux": { "autotitle": true }` in Pi settings. Project settings override global settings; this environment variable overrides both. |
 | `PI_CMUX_AUTOTITLE_DISABLED` | `0` | Set `1` to disable conversation tab titles regardless of other settings. |
 | `PI_CMUX_AUTOTITLE_MODEL` | current session model | Optional `provider/model` or exact model ID for naming. An unknown model skips naming rather than falling back. |
+
+For a quieter sidebar, set `export PI_CMUX_SIDEBAR_MODE=minimal` before starting Pi. Minimal mode suppresses all package logs and progress even if their individual flags are enabled. Tokens appear on the existing status line; set `PI_CMUX_SIDEBAR_TOKENS=0` to hide them. Cost remains opt-in via `PI_CMUX_SIDEBAR_COST=1`. It does not remove existing logs or hide cmux's native message previews, activity, branch, or path. See [sidebar modes](docs/usage.md#sidebar-statuslog).
 
 Conversation tab titles are **opt-in**. After successful settlement, a background LLM request summarizes up to four recent text messages (300 characters each) and renames only the current cmux tab. This sends conversation excerpts to the selected model provider and may incur additional usage charges. It runs only in interactive Pi inside cmux, uses the session's provider registry, and never creates a child Pi session. `/name` takes priority; automatic titles are saved in the session so reload/resume does not repeat the request. See [conversation tab titles](docs/usage.md#conversation-tab-titles) for configuration and lifecycle behavior.
 
