@@ -164,6 +164,18 @@ Legacy aliases:
 - `/cmux-v` → `/cmv`
 - `/cmux-h` → `/cmh`
 
+## Agent-started Pi sessions
+
+Ask Pi to start a fresh session in another directory:
+
+```text
+start a fresh Pi session in a right split in ~/src/other-repo to review the auth flow
+```
+
+The `cmux_start_pi` tool accepts optional `cwd` for all placements (`workspace`, `right`, `down`, `tab`). Omit it to use the caller's directory. Absolute paths, paths relative to the current session, and `~` or `~/…` are supported; the path must be an existing directory. Invalid paths fail before cmux opens anything. The new session's launch, title context, and returned working directory use that path; the source session stays unchanged.
+
+`cwd` is for fresh sessions only and cannot be combined with `continueSession: true`, including branch worktree handoffs. Handoffs retain the source directory or use the newly created worktree. `/cmn`, `/cmv`, and `/cmh` still use the current directory; `/cmz` and `/cmzh` remain available for directory jumps.
+
 ## Tool splits and tabs
 
 ```text

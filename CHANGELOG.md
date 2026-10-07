@@ -4,6 +4,8 @@
 
 ### Added
 
+- Added optional `cwd` to `cmux_start_pi` for fresh sessions in another repository or directory, across workspace, split, and tab placements. Supports absolute, session-relative, and home-relative paths; rejects invalid directories and combinations with `continueSession` before opening cmux.
+
 - Added `PI_CMUX_SIDEBAR_MODE=minimal|detailed` (default `detailed`). Minimal shows live cumulative tokens on the temporary Pi status and keeps configured flashes while suppressing package progress and all logs. Token opt-out and cost opt-in apply in both modes. Native cmux rows and existing logs are unchanged.
 
 ## [0.1.24] - 2026-09-28

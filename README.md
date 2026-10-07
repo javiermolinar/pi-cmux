@@ -13,7 +13,7 @@ A [Pi](https://pi.dev) package that turns [cmux](https://www.cmux.dev) into your
 
 ## Capabilities
 
-- **Parallel Pi sessions.** Start a fresh chat in a named sidebar workspace or split Pi beside your current session.
+- **Parallel Pi sessions.** Start a fresh chat in a named sidebar workspace or split Pi beside your current session, in the current project or another directory.
 - **Tools within reach.** Open tests, dev servers, and interactive tools in splits or tabs. Define shortcuts for commands you use often.
 - **Browser feedback.** Preview a page beside Pi, select an element, and send a note back after confirming it in Pi.
 - **Handoffs with context.** Continue a task in another split or a new branch worktree with handoff context.
@@ -145,6 +145,8 @@ Example Hunk review shortcut:
 Use `/ck` to open Hunk in a cmux split, add Hunk comments while reviewing, then ask Pi to read them.
 
 `pi-cmux` also exposes an agent tool so Pi can open an explicitly requested terminal command in a cmux split or tab. For example, asking "open k9s in a new tab" lets Pi open `k9s` without trying to capture the TUI through a shell command.
+
+Ask "start a fresh Pi session in a right split in ~/src/other-repo" to use `cmux_start_pi` with `cwd`. The optional path accepts absolute paths, paths relative to the current session, and `~/…`; it must be an existing directory. Omit it to keep the current directory. `cwd` cannot be combined with `continueSession: true`; handoffs keep the source directory or use the new branch worktree.
 
 Ask "open http://localhost:3000 beside Pi" to use `cmux_open_browser`. An **Annotate** toggle appears automatically, initially off. Switch it on, select an element, write a note, and Send; Pi shows a compact note preview with Cancel / Send to Pi before steering. Switch it off to browse normally without losing your draft. Page scripts can forge submissions, so approve only notes you recognize. See [browser usage and lifecycle](docs/usage.md#browser-splits).
 
