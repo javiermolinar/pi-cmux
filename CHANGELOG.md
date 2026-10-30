@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-30
+
 ### Fixed
 
 - Register remote-only `ssh_read`, `ssh_write`, `ssh_edit` and `ssh_bash` instead of claiming core-tool names, allowing local tool extensions to coexist with SSH enabled (#22). Automatically select only counterparts of the prior local selection and guard local file/shell names at direct/nested execution boundaries; `/ssh-clear` restores prior available membership without resetting unrelated tool choices.
