@@ -64,9 +64,17 @@ The owning parent UI receives startup warnings/errors without a new model turn. 
 
 ### Pi launch PATH
 
-Default `PI_CMUX_PI_PATH_MODE=minimal` resolves executable Pi/Node directories on caller PATH, invokes Pi by absolute path and prepends those directories to the child's own PATH. Relative entries resolve before changing cwd. Both PATH modes propagate to child Pi launches. Missing executables in minimal mode or an invalid mode stop creation without fallback.
+Set `PI_CMUX_BINARY` before starting Pi to use a Pi-compatible wrapper for all child sessions (workspaces, splits, tabs and handoffs):
 
-Other tools may resolve differently or be missing. To preserve caller PATH:
+```sh
+export PI_CMUX_BINARY=sumocode
+```
+
+Unset or blank values default to `pi`. Supply one executable name or path, not arguments or shell code; aliases/functions and `~` expansion are not supported. Names resolve on the caller's PATH; relative paths resolve from the calling Pi process's working directory before the child changes cwd. Overrides are checked for executability in both PATH modes, shell-quoted and passed to descendants as absolute paths. Invalid overrides stop creation without falling back to `pi`. Wrappers must accept and forward Pi's CLI arguments, including `--session`, provider/model/thinking options and the `--` prompt separator.
+
+Default `PI_CMUX_PI_PATH_MODE=minimal` resolves the selected executable and Node, invokes the executable by absolute path and prepends their directories to the child's own PATH. Relative PATH entries resolve before changing cwd. Both PATH modes propagate to child Pi launches. Missing executables in minimal mode or an invalid mode stop creation without fallback.
+
+Other tools, including a wrapper's underlying `pi`, may resolve differently or be missing. To preserve caller PATH:
 
 ```sh
 export PI_CMUX_PI_PATH_MODE=full

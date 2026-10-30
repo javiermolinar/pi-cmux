@@ -21,7 +21,7 @@
 
 ## Install
 
-Requires **Pi 1.3.0+** and **Node.js 22.19.0+**, including the `pi` executable on your PATH.
+Requires **Pi 1.3.0+** and **Node.js 22.19.0+**, with `pi` on your PATH or a Pi-compatible wrapper selected via `PI_CMUX_BINARY`.
 
 ```sh
 pi install npm:pi-cmux
@@ -81,7 +81,8 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PI_CMUX_PI_PATH_MODE` | `minimal` | Prepend Pi/Node directories to child PATH; `full` preserves caller PATH |
+| `PI_CMUX_BINARY` | `pi` | Pi-compatible executable name or path, e.g. `sumocode`; no arguments or shell commands |
+| `PI_CMUX_PI_PATH_MODE` | `minimal` | Prepend selected executable/Node directories to child PATH; `full` preserves caller PATH |
 | `PI_CMUX_SSH` | `1` | `0` disables SSH execution/connections; saved remote intent stays blocked until explicit clear |
 | `PI_CMUX_SSH_DISCOVERY` | `1` | `0` disables SSH suggestions |
 | `PI_CMUX_SSH_ALIAS_SAVE` | `1` | `0` disables alias saving |

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Support `PI_CMUX_BINARY` for Pi-compatible wrapper executables in all child session launches (#3). Resolve and shell-quote executable names/paths in both PATH modes, propagate the resolved override to descendants and reject invalid overrides before creating a pane. Unset/blank values retain the default `pi` behavior; helper terminals are unchanged.
+
 ## [0.4.1] - 2026-10-30
 
 ### Fixed

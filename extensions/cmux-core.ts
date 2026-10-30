@@ -119,16 +119,17 @@ export function shellEscape(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function resolvePathExecutable(name: string): string {
-	for (const entry of process.env.PATH?.split(delimiter) ?? []) {
-		// Resolve relative/empty entries in the calling process, before the child cd.
-		const path = resolve(entry || ".", name);
+function resolvePathExecutable(name: string, source = "Minimal Pi PATH"): string {
+	// Explicit paths and relative/empty PATH entries resolve before the child cd.
+	const candidates = name.includes("/") ? [resolve(name)]
+		: (process.env.PATH?.split(delimiter) ?? []).map((entry) => resolve(entry || ".", name));
+	for (const path of candidates) {
 		try {
 			accessSync(path, constants.X_OK);
 			if (statSync(path).isFile()) return path;
 		} catch { /* continue through missing, broken or non-executable candidates */ }
 	}
-	throw new Error(`Minimal Pi PATH requires executable ${name} on the caller PATH`);
+	throw new Error(`${source} requires executable ${name}${name.includes("/") ? "" : " on the caller PATH"}`);
 }
 
 function buildCommandPrefix(cwd: string, minimalPiPath?: string): string[] {
@@ -147,10 +148,15 @@ function buildCommandPrefix(cwd: string, minimalPiPath?: string): string[] {
 export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
 	const mode = process.env.PI_CMUX_PI_PATH_MODE?.trim().toLowerCase() || "minimal";
 	if (mode !== "full" && mode !== "minimal") throw new Error("PI_CMUX_PI_PATH_MODE must be full or minimal");
-	const executable = mode === "minimal" ? resolvePathExecutable("pi") : undefined;
-	const minimalPath = executable ? [...new Set([dirname(executable), dirname(resolvePathExecutable("node"))])].join(delimiter) : undefined;
+	const binary = process.env.PI_CMUX_BINARY?.trim();
+	const executable = binary ? resolvePathExecutable(binary, "PI_CMUX_BINARY")
+		: mode === "minimal" ? resolvePathExecutable("pi") : undefined;
+	const minimalPath = mode === "minimal" && executable
+		? [...new Set([dirname(executable), dirname(resolvePathExecutable("node"))])].join(delimiter) : undefined;
 	const prefix = buildCommandPrefix(cwd, minimalPath);
 	if (mode === "full") prefix.splice(prefix.length - 1, 0, "PI_CMUX_PI_PATH_MODE=full");
+	// cmux need not inherit caller exports. Keep the same wrapper in descendants.
+	if (binary && executable) prefix.splice(prefix.length - 1, 0, `PI_CMUX_BINARY=${shellEscape(executable)}`);
 	if (options?.orientationBootstrap) prefix.splice(prefix.length - 1, 0, `PI_CMUX_ORIENTATION=${shellEscape(options.orientationBootstrap)}`);
 	const commandParts = [...prefix, executable ? shellEscape(executable) : "pi"];
 	if (options?.sessionFile) {
