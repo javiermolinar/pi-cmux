@@ -2,7 +2,7 @@
 
 Authorized on **2026-10-25–26** for `javi:/tmp/pi-cmux-smoke.MpOwWVWb`, using an ordinary local cmux workspace. Files/surfaces were retained: no deletion, existing-prompt input, reload, alias/config writes or other-host probes.
 
-This predates the R1/R2 repairs and later launch-size changes. See [post-fix core evidence](ssh-postfix-validation.md); neither smoke certifies later native child launches.
+This predates the R1/R2 repairs, later launch-size changes and #22 separate SSH-tool/selection refactor. References to core tools below describe the old implementation, not current names or validated current behavior. See [post-fix core evidence](ssh-postfix-validation.md); neither smoke certifies later native child launches.
 
 ## Environment and results
 

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, realpa
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { SessionManager, createReadToolDefinition, createWriteToolDefinition, createEditToolDefinition, createBashToolDefinition } from "@earendil-works/pi-coding-agent";
 import registerCmuxSsh from "../extensions/cmux-ssh.ts";
 import cmuxOpen from "../extensions/cmux-open.ts";
 import startPi from "../extensions/cmux-start.ts";
@@ -22,13 +22,18 @@ function fixture(t, opts = {}) {
 	writeFileSync(join(bin, "hostname"), "#!/bin/sh\nprintf '%s\\n' REMOTE_HOST_SENTINEL\n", { mode: 0o700 });
 	const fakeSsh = join(root, "fake-ssh");
 	writeFileSync(fakeSsh, `#!/bin/sh\nfor last do :; done\nPATH=${shellQuote(`${bin}:/usr/bin:/bin`)}; export PATH\nexec /bin/sh -c "$last"\n`, { mode: 0o700 });
-	const tools = new Map(), commands = new Map(), handlers = new Map(), calls = [], sshCalls = [], confirmations = [];
+	const tools = new Map(), registeredTools = [], commands = new Map(), handlers = new Map(), calls = [], sshCalls = [], confirmations = [];
+	for (const create of [createReadToolDefinition, createWriteToolDefinition, createEditToolDefinition, createBashToolDefinition]) {
+		const tool = create(local); tools.set(tool.name, tool);
+	}
+	let active = ["read", "write", "edit", "bash"];
 	const manager = SessionManager.inMemory(local);
 	const ctx = { cwd: local, sessionManager: manager, isIdle: () => false, hasUI: true, signal: undefined,
 		ui: { setStatus() {}, notify() {}, async confirm(title, preview) { confirmations.push({ title, preview }); return opts.confirm ?? false; } } };
 	const pi = {
-		registerTool(tool) { tools.set(tool.name, tool); }, registerCommand(name, c) { commands.set(name, c); },
+		registerTool(tool) { registeredTools.push(tool.name); tools.set(tool.name, tool); }, registerCommand(name, c) { commands.set(name, c); },
 		appendEntry(type, data) { manager.appendCustomEntry(type, data); },
+		getActiveTools: () => [...active], setActiveTools: names => { active = [...names]; },
 		on(name, fn) { const rows = handlers.get(name) ?? []; rows.push(fn); handlers.set(name, rows); },
 		async exec(file, args) {
 			calls.push({ file, args });
@@ -57,10 +62,15 @@ function fixture(t, opts = {}) {
 		await emit("input", { text, source: "interactive", ...extra });
 		return emit("before_agent_start", { messageType: "user", prompt: text });
 	};
-	const execute = (name, params = {}, signal) => tools.get(name).execute("fixture", params, signal, undefined, ctx);
+	const execute = async (name, params = {}, signal) => {
+		const results = await emit("tool_call", { toolName: name, toolCallId: "fixture", input: params });
+		const blocked = results.find(result => result?.block);
+		if (blocked) throw new Error(blocked.reason);
+		return tools.get(name).execute("fixture", params, signal, undefined, ctx);
+	};
 	const target = { destination: "fixture", remoteCwd: remote };
 	const connectText = `Connect to fixture in ${JSON.stringify(remote)}`;
-	return { root, local, remote, home, fakeSsh, pi, ctx, manager, adapter, runtime: adapter.runtime, tools, commands, calls, sshCalls, confirmations, emit, request, execute, target, connectText };
+	return { root, local, remote, home, fakeSsh, pi, ctx, manager, adapter, runtime: adapter.runtime, tools, registeredTools, commands, calls, sshCalls, confirmations, emit, request, execute, target, connectText };
 }
 
 test("central registration is inert; complete direct request connects once and sentinel checks prove core/helper locality", async t => {
@@ -73,12 +83,14 @@ test("central registration is inert; complete direct request connects once and s
 	assert.equal(h.confirmations.length, 0); assert.equal(h.sshCalls.length, 1);
 	await assert.rejects(h.execute("ssh_connect", h.target), /explicit current/);
 	assert.equal(h.sshCalls.length, 1, "no automatic replay in the same input grant");
-	await h.execute("write", { path: "sentinel.txt", content: "REMOTE_FILE_SENTINEL" });
-	await h.execute("edit", { path: "sentinel.txt", edits: [{ oldText: "REMOTE", newText: "EDITED_REMOTE" }] });
-	assert.match((await h.execute("read", { path: "sentinel.txt" })).content[0].text, /EDITED_REMOTE/);
+	await assert.rejects(h.execute("ssh_write", { path: "sentinel.txt", content: "no stale batch" }), /fresh model turn/);
+	await h.emit("turn_start");
+	await h.execute("ssh_write", { path: "sentinel.txt", content: "REMOTE_FILE_SENTINEL" });
+	await h.execute("ssh_edit", { path: "sentinel.txt", edits: [{ oldText: "REMOTE", newText: "EDITED_REMOTE" }] });
+	assert.match((await h.execute("ssh_read", { path: "sentinel.txt" })).content[0].text, /EDITED_REMOTE/);
 	assert.equal(readFileSync(join(h.local, "sentinel.txt"), "utf8"), "LOCAL_FILE_SENTINEL");
 	assert.equal(readFileSync(join(h.remote, "sentinel.txt"), "utf8"), "EDITED_REMOTE_FILE_SENTINEL");
-	const result = await h.execute("bash", { command: "hostname; pwd; printf REMOTE_COMMAND_SENTINEL" });
+	const result = await h.execute("ssh_bash", { command: "hostname; pwd; printf REMOTE_COMMAND_SENTINEL" });
 	assert.match(result.structuredContent.output, /REMOTE_HOST_SENTINEL/);
 	assert.ok(result.structuredContent.output.includes(h.remote));
 	assert.equal(process.cwd().includes("cmux-ssh-e2e-"), false, "Pi itself never chdirs to remote");
@@ -97,7 +109,7 @@ test("central registration is inert; complete direct request connects once and s
 	const branch = h.manager.getBranch();
 	assert.deepEqual(branch.at(-1).data.target, h.target);
 	await h.emit("session_start"); assert.equal(h.runtime.snapshot().state, "configured");
-	await assert.rejects(h.execute("write", { path: "wrong.txt", content: "no fallback" }), /not ready/);
+	await assert.rejects(h.execute("ssh_write", { path: "wrong.txt", content: "no fallback" }), /not ready/);
 	assert.equal(existsSync(join(h.local, "wrong.txt")), false);
 	await h.request(h.connectText); await h.execute("ssh_connect", h.target); // new explicit input, no restore auto-connect
 	const child = await h.execute("cmux_start_pi", { placement: "tab", related: true, prompt: "work on remote project" });
@@ -143,7 +155,8 @@ for (const explicit of [false, true]) {
 		assert.equal(entries.length, 2);
 		assert.equal(entries[0].data.kind, "pending"); assert.equal(entries[0].data.target, undefined);
 		assert.equal(entries[1].data.target.remoteCwd, h.home);
-		await h.execute("write", { path: "home-check.txt", content: "REMOTE_HOME" });
+		await h.emit("turn_start");
+		await h.execute("ssh_write", { path: "home-check.txt", content: "REMOTE_HOME" });
 		assert.equal(readFileSync(join(h.home, "home-check.txt"), "utf8"), "REMOTE_HOME");
 		assert.equal(existsSync(join(h.local, "home-check.txt")), false);
 		const callsBeforeResume = h.sshCalls.length;
@@ -175,16 +188,48 @@ test("the explicit ssh-bind command shares the remote-home default", async t => 
 
 test("disable controls preserve local tools, block saved remote intent, and avoid discovery/config I/O", async t => {
 	const h = fixture(t, { env: { PI_CMUX_SSH: "0" } }); await h.emit("session_start");
+	assert.deepEqual(h.registeredTools.filter(name => ["read", "write", "edit", "bash"].includes(name)), []);
 	await h.execute("write", { path: "local.txt", content: "local when disabled without intent" });
 	await h.request(h.connectText); await assert.rejects(h.execute("ssh_connect", h.target), /disabled/);
 	assert.match((await h.execute("ssh_discover")).content[0].text, /disabled/);
 	await assert.rejects(h.execute("ssh_alias_save", { alias: "work", hostname: "fixture" }), /disabled/);
 	assert.equal(h.sshCalls.length, 0); assert.equal(h.calls.length, 0);
+	h.manager.appendCustomEntry("pi-cmux.ssh-tool-selection", { version: 1, kind: "capture", sessionId: h.manager.getSessionId(), localCwd: h.local,
+		localTools: ["read", "write", "edit", "bash"], exact: true });
 	h.manager.appendCustomEntry("pi-cmux.ssh-target", { version: 1, kind: "target", sessionId: h.manager.getSessionId(), localCwd: h.local, target: h.target });
 	await h.emit("session_start");
-	await assert.rejects(h.execute("write", { path: "no-fallback", content: "no" }), /not ready/);
+	for (const event of ["session_start", "session_tree"]) {
+		await h.emit(event);
+		for (const name of ["read", "write", "edit", "bash"]) {
+			await assert.rejects(h.execute(name, { path: "no-fallback", content: "no", command: "touch no-fallback" }), /blocked/);
+		}
+		await assert.rejects(h.emit("user_bash", { command: "touch no-fallback" }), /not ready/);
+	}
 	assert.equal(existsSync(join(h.local, "no-fallback")), false);
+	h.ctx.isIdle = () => true;
+	await h.commands.get("ssh-clear").handler("", h.ctx);
+	assert.equal(h.pi.getActiveTools().includes("write"), true);
+	await h.execute("write", { path: "local-again", content: "explicitly cleared" });
+	assert.equal(readFileSync(join(h.local, "local-again"), "utf8"), "explicitly cleared");
+	assert.equal(h.sshCalls.length, 0);
 });
+
+for (const kind of ["pending", "invalid"]) {
+	test(`disabled SSH blocks restored ${kind} intent without registering core tools`, async t => {
+		const h = fixture(t, { env: { PI_CMUX_SSH: "0" } });
+		h.manager.appendCustomEntry("pi-cmux.ssh-target", kind === "pending"
+			? { version: 1, kind: "pending", sessionId: h.manager.getSessionId(), localCwd: h.local, destination: "fixture" }
+			: { version: 999, kind: "target" });
+		await h.emit("session_start");
+		assert.deepEqual(h.registeredTools.filter(name => ["read", "write", "edit", "bash"].includes(name)), []);
+		for (const name of ["read", "write", "edit", "bash"]) {
+			await assert.rejects(h.execute(name, { path: "no-fallback", content: "no", command: "touch no-fallback" }), /blocked/);
+		}
+		await assert.rejects(h.emit("user_bash", { command: "touch no-fallback" }), /not ready/);
+		assert.equal(existsSync(join(h.local, "no-fallback")), false);
+		assert.equal(h.sshCalls.length, 0);
+	});
+}
 
 test("failed home lookup cannot make core tools local on reload", async t => {
 	const h = fixture(t, { authFail: true }); await h.emit("session_start");
@@ -194,7 +239,7 @@ test("failed home lookup cannot make core tools local on reload", async t => {
 	for (const event of [undefined, "session_start", "session_tree"]) {
 		if (event) await h.emit(event);
 		assert.equal(h.runtime.snapshot().state, "disconnected");
-		await assert.rejects(h.execute("write", { path: "must-not-be-local", content: "no" }), /not ready/);
+		await assert.rejects(h.execute("write", { path: "must-not-be-local", content: "no" }), /blocked/);
 		assert.equal(existsSync(join(h.local, "must-not-be-local")), false);
 	}
 	assert.equal(h.sshCalls.length, 1);

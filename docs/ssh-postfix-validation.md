@@ -1,4 +1,6 @@
-# Post-fix SSH core validation
+# Historical post-fix SSH core validation
+
+This evidence predates #22's `ssh_read`/`ssh_write`/`ssh_edit`/`ssh_bash` names and selection controller. It is not live verification of the current refactor; old core names below are historical.
 
 On **2026-10-26**, repaired R1/R2 code passed a real core smoke on authorized `javi:/tmp/pi-cmux-smoke.MpOwWVWb`. This used a programmatic host/pinned Pi 1.3.0 definitions, not a live model conversation.
 

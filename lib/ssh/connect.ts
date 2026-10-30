@@ -75,13 +75,15 @@ export function createSshConnector(adapter: SshExecutionAdapter, authority: SshA
 	let busy = false;
 	return async (value: unknown, ctx: ExtensionContext, signal?: AbortSignal): Promise<string> => {
 		const request = validateConnect(value);
-		const guard = () => assertSshAction(adapter, authority, ctx, "connect", request, signal);
+		const assertSelection = adapter.selection?.lease(ctx);
+		const guard = () => { assertSelection?.(); assertSshAction(adapter, authority, ctx, "connect", request, signal); };
 		guard();
 		if (busy) throw new Error("An SSH connection action is already in progress");
 		const finish = authority.begin?.(ctx, "connect", request);
 		busy = true;
 		let probe: SshValidationProbe | undefined;
 		try {
+			adapter.selection?.prepare(ctx);
 			const actionSignal = AbortSignal.any([...(signal ? [signal] : []), ...(ctx.signal ? [ctx.signal] : []), ...(finish?.signal ? [finish.signal] : [])]);
 			const home = request.remoteCwd === "~" ? await adapter.resolveHome(request.destination, actionSignal, guard) : undefined;
 			const target = home?.target ?? parseSshTarget(request);
@@ -96,7 +98,7 @@ export function createSshConnector(adapter: SshExecutionAdapter, authority: SshA
 			probe = await adapter.probeValidation(actionSignal, guard);
 			// No await follows this authority check + scoped readiness commit.
 			probe.commit(guard);
-			return `SSH execution ready; remote directory: ${JSON.stringify(target.remoteCwd)}. Pi and session storage remain local.`;
+			return `SSH execution ready; remote directory: ${JSON.stringify(target.remoteCwd)}. Selected SSH data tools are admitted on the next model turn, not this response batch. Pi and session storage remain local.`;
 		} catch (error) {
 			if (error instanceof SshTransportError && error.kind === "connection") throw new Error(SSH_AUTH_GUIDANCE);
 			// Do not echo arbitrary transport errors/output, which may contain sensitive text.
@@ -105,8 +107,8 @@ export function createSshConnector(adapter: SshExecutionAdapter, authority: SshA
 	};
 }
 const registered = new WeakSet<ExtensionAPI>();
-/** Registration alone is inert; the bundle supplies the SAME core-routing adapter
- * and source-checked current-request authority. */
+/** Registration alone is inert; the bundle supplies the remote-only adapter
+ * and source-checked current-request authority. Nested connection controls are forbidden. */
 export function registerSshConnect(pi: ExtensionAPI, adapter: SshExecutionAdapter, authority: SshActionAuthority): void {
 	if (registered.has(pi)) return;
 	registered.add(pi);
@@ -115,7 +117,7 @@ export function registerSshConnect(pi: ExtensionAPI, adapter: SshExecutionAdapte
 		name: "ssh_connect", label: "Connect SSH", description: SSH_CONNECT_GUIDANCE,
 		parameters: { type: "object", required: ["destination"], additionalProperties: false,
 			properties: { destination: { type: "string" }, remoteCwd: { type: "string", description: "Absolute remote directory, or ~ for the remote account home (default).", default: "~" } } } as any,
-		executionMode: "sequential",
+		exposure: "model-only", executionMode: "sequential",
 		async execute(_id, parameters, signal, _onUpdate, ctx) {
 			const text = await connect(parameters, ctx, signal);
 			return { content: [{ type: "text", text }], details: {} };

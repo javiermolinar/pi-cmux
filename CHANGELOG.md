@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Register remote-only `ssh_read`, `ssh_write`, `ssh_edit` and `ssh_bash` instead of claiming core-tool names, allowing local tool extensions to coexist with SSH enabled (#22). Automatically select only counterparts of the prior local selection and guard local file/shell names at direct/nested execution boundaries; `/ssh-clear` restores prior available membership without resetting unrelated tool choices.
+- Report cancellation/timeouts after acknowledged SSH effects as uncertain, not “not dispatched”; retain prior workflow-stage effects and warn against automatic retry. Preserve definite pre-dispatch failures and stale-target rejection.
+- Declare ready SSH tools before the first fresh model request while retaining the transition-batch execution guard.
+- Preserve the restored local tool selection when `/ssh-clear` is followed by exit/resume before another model request. Newer persisted local tool choices take precedence.
+
+### Changed
+
+- Remote integrations must use the `ssh_*` tool names; old core-name transcripts are not reinterpreted or replayed remotely. `PI_CMUX_SSH=0` disables SSH execution rather than resolving tool ownership conflicts. Core-tool renderers such as pi-tool-display do not automatically render the new names.
+
+### Documentation
+
+- Replace exclusive-adapter guidance with the SSH selection/state matrix, disablement and restoration rules, local-extension boundaries and migration limits. Add real Pi 1.3.0/1.4.0 SDK coexistence/QuickJS/lifecycle regressions with a display-equivalent owner in both load orders. Record a bounded [live SSH smoke](docs/ssh-isolation-live-validation.md) on Pi 1.4.0 in both fixture load orders; real-package rendering and live cancellation/fault injection remain unverified.
+
 ## [0.4.0] - 2026-10-28
 
 ### Added

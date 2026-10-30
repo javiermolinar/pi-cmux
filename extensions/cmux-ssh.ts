@@ -59,10 +59,11 @@ export default function registerCmuxSsh(pi: ExtensionAPI, options: SshIntegratio
 	const old = registered.get(pi); if (old) return old;
 	const env = options.env ?? process.env;
 	const enabled = env.PI_CMUX_SSH !== "0";
-	const adapter = registerSshAdapter(pi, options), runtime = adapter.runtime;
+	const adapter = registerSshAdapter(pi, { ...options, enabled }), runtime = adapter.runtime;
 	registered.set(pi, adapter);
-	runtime.setEnabled(enabled);
-	registerSshLaunchBootstrap(pi); // Must precede orientation's startup entries.
+	// Selection startup is inert in local mode. The child captures only AFTER
+	// bootstrap's strict fresh-branch check, before configured intent is saved.
+	registerSshLaunchBootstrap(pi, ctx => adapter.selection!.prepare(ctx), ctx => adapter.selection!.start(ctx)); // Before orientation entries.
 	let pending: Supplied | undefined, grant: Grant | undefined;
 	const reset = () => { grant?.controller.abort(); pending = undefined; grant = undefined; };
 	pi.on("session_start", reset); pi.on("session_tree", reset); pi.on("session_shutdown", reset);

@@ -1,14 +1,18 @@
-# SSH transport and core tools
+# SSH transport and remote-only tools
 
 `registerSshAdapter(pi, options)` returns one shared `SshExecutionAdapter` per Pi API. The bundle registers it without connecting, using Pi 1.3.0 pluggable operations—not the installed example's private state. See [activation and controls](ssh.md).
 
 ## Routing
 
-Inactive sessions use local tools. Configured/disconnected/disabled/invalid SSH intent cannot fall back locally. Each remote workflow holds an immutable session/generation ticket, checked before effects and after awaits. Replacement, lifecycle changes and disablement revoke tickets.
+The adapter registers only `ssh_read`, `ssh_write`, `ssh_edit` and `ssh_bash` as direct, inactive-by-default data tools. It never owns or delegates to local `read`, `write`, `edit` or `bash`. `options.enabled: false` (bundle: `PI_CMUX_SSH=0`) disables execution, not registration or saved-intent guards. Enablement is fixed for the loaded adapter.
+
+`lib/ssh/selection.ts` captures branch-local guarded membership before connection effects. Readiness publishes mapped SSH counterparts before Pi snapshots declarations; a separate current-generation fresh-turn gate rejects transition-batch execution, even with a cached tool object. The tools' own execute guards supplement Pi's `tool_call` guard. Direct/nested/codemode calls to local `read/write/edit/bash/powershell/grep/find/ls` are blocked throughout remote intent. Local startup is unchanged. Explicit idle clear restores known, still-available guarded membership and preserves current unrelated membership; reload/resume/tree reconstruction never restores readiness. See [the state matrix and migration rules](ssh.md#tool-selection-and-local-guards).
+
+Configured/disconnected/disabled/pending/invalid SSH intent cannot fall back locally. Each remote workflow also holds an immutable session/generation ticket, checked before effects and after awaits. Replacement, lifecycle changes and disablement revoke tickets.
 
 File paths resolve lexically against remote cwd; closures bypass Pi's local path expansion. No local-prefix, home or environment substitution occurs. Read MIME detection caches at most one bounded file. Write/edit workflows reject overlap; external remote writers are not locked, so edits are not distributed transactions.
 
-Only the four core tools and user `!`/`!!` use SSH. Other tools/extensions, instruction discovery, credentials and output spools remain local. Remote project instructions/extensions are not loaded automatically.
+Only the four SSH data tools and this adapter's user `!`/`!!` path use SSH. Other tools/extensions, instruction discovery, credentials and output spools remain local. Remote project instructions/extensions are not loaded automatically. Already-admitted local work cannot be cancelled retroactively; earlier competing user-shell handlers and direct extension I/O are outside this boundary.
 
 ## Transport
 
@@ -45,6 +49,8 @@ Associated targets require trusted observation during validation/before operatio
 
 Cancellation, timeout and output-limit terminate local SSH, escalating after 250 ms. This does not prove remote descendants stopped or effects rolled back. Connection/spawn/timeout failures revoke current readiness; cancellation/output-limit/callback failures do not necessarily do so. Stale failures cannot disconnect a replacement. There is no automatic retry/reconnect.
 
+“Not dispatched” is reserved for definite pre-dispatch failure with no earlier completed stage in that workflow. Cancellation/timeout after a data-stage acknowledgment is uncertain even when the bytes were written successfully; cancellation while awaiting a handed-off connection transport request is conservatively uncertain too. An earlier stage (for example, directory creation before a write) cannot be erased by a later no-dispatch failure. These results warn that remote effects may have occurred and must not be automatically retried. Revoked/stale work still cannot publish success or disconnect a replacement target.
+
 ## Evidence
 
-Transport/adapter/protocol/integration tests use injected endpoints, local bash and isolated roots. They cover quoting, binary/Unicode data, noise, malformed frames, cancellation, stale authority and uncertain acknowledgements. [Post-fix native evidence](ssh-postfix-validation.md) covers a clean real endpoint only; live noise/cancellation and remote quiescence are not established.
+Transport/adapter/protocol/integration tests use injected endpoints, local bash and isolated roots. They cover quoting, binary/Unicode data, noise, malformed frames, cancellation, stale authority and uncertain acknowledgements. Real SDK/QuickJS coexistence and lifecycle tests run on Pi 1.3.0/1.4.0 in both surrogate-owner load orders. The real pi-tool-display package/rendering remains unverified. The [current live smoke](ssh-isolation-live-validation.md) verifies clean real SSH file/shell effects and isolation/clear behavior on Pi 1.4.0 in both fixture load orders, not real-package rendering or production CLI/UI discovery. [Post-fix native evidence](ssh-postfix-validation.md) predates separate SSH tool names. Live noise/cancellation and remote quiescence remain unverified.

@@ -69,7 +69,9 @@ Connect to javi
 Connect to javi in /srv/project
 ```
 
-Pi and its credentials/session files stay local; core file/shell tools use the explicit remote target. Helpers default to that project; `/cmt --local k9s` or tool `target: "local"` stays on the Mac. Omitted cwd or `~` defaults to the remote account's home, resolved remotely and stored as an absolute path. Complete requests need no extra gate; unresolved hosts or invalid paths are clarified one at a time. Alias saving is separate and requires an exact-preview confirmation.
+Pi and its credentials/session files stay local; `ssh_read`, `ssh_write`, `ssh_edit` and `ssh_bash` use the explicit remote target. Helpers default to that project; `/cmt --local k9s` or tool `target: "local"` stays on the Mac. Omitted cwd or `~` defaults to the remote account's home, resolved remotely and stored as an absolute path. Complete requests need no extra gate; unresolved hosts or invalid paths are clarified one at a time. Alias saving is separate and requires an exact-preview confirmation.
+
+SSH does not claim the local `read`, `write`, `edit` or `bash` names, so extensions such as `pi-tool-display` can retain them with SSH enabled. On connection, Pi selects only SSH counterparts of the previously selected local tools and blocks local file/shell counterparts, including nested calls. `/ssh-clear`, while idle, restores the prior available local membership. `pi-tool-display` does not automatically customize the new SSH tools. See [selection, guards and migration](docs/ssh.md#tool-selection-and-local-guards).
 
 Resume/child launches restore selection, not readiness. Remote-owned layouts, SSH handoffs/worktrees and new browser previews are unsupported. See [SSH setup, controls and limits](docs/ssh.md).
 
@@ -80,7 +82,7 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 | Variable | Default | Purpose |
 |---|---|---|
 | `PI_CMUX_PI_PATH_MODE` | `minimal` | Prepend Pi/Node directories to child PATH; `full` preserves caller PATH |
-| `PI_CMUX_SSH` | `1` | `0` disables SSH integration without making saved remote intent local |
+| `PI_CMUX_SSH` | `1` | `0` disables SSH execution/connections; saved remote intent stays blocked until explicit clear |
 | `PI_CMUX_SSH_DISCOVERY` | `1` | `0` disables SSH suggestions |
 | `PI_CMUX_SSH_ALIAS_SAVE` | `1` | `0` disables alias saving |
 | `PI_CMUX_NOTIFY_LEVEL` | `disabled` | Opt in with `all`, `medium` or `low` |
@@ -95,4 +97,4 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 
 Bundled Pi tabs/splits and helper terminals require verified local workspace metadata and exact creation UUIDs. Remote-owned or unverified placement is refused. New sidebar workspaces still use create + respawn; cmux's outer login shell may run profiles before the launch PATH takes effect. Standalone legacy Pi launch paths can do the same.
 
-Workspace/browser behavior was tested on cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher on **0.65.2**. The switcher revalidates exact surface UUIDs before focusing and leaves rows unlabeled when cmux reports no agent. The 0.3.0 [local startup smoke](docs/startup-smoke.md) passed for one no-prompt workspace and one tab on **0.65.2** with Pi **1.4.0**. A task-aware reviewer smoke also confirmed omitted placement resolving to a right split with an exact child binding. Other split/layout cases, long prompts and live transport failures remain unverified. See [compatibility details](docs/usage.md#compatibility) and [SSH evidence](docs/ssh-native-validation.md).
+Workspace/browser behavior was tested on cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher on **0.65.2**. The switcher revalidates exact surface UUIDs before focusing and leaves rows unlabeled when cmux reports no agent. The 0.3.0 [local startup smoke](docs/startup-smoke.md) passed for one no-prompt workspace and one tab on **0.65.2** with Pi **1.4.0**. A task-aware reviewer smoke also confirmed omitted placement resolving to a right split with an exact child binding. Other split/layout cases, long prompts and live transport failures remain unverified. See [compatibility details](docs/usage.md#compatibility) and [current SSH isolation smoke evidence](docs/ssh-isolation-live-validation.md). Historical helper/child evidence remains [separate](docs/ssh-native-validation.md).

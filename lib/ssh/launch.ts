@@ -66,7 +66,8 @@ export function withSshLaunchEnvironment(command: string, bootstrap?: string): s
 /** Consume before any await/child launch, including invalid input. Never validates/connects SSH.
  * The environment is a trusted local launch channel, not an authentication protocol. */
 export function consumeSshLaunch(pi: ExtensionAPI, ctx: Pick<ExtensionContext, "cwd" | "sessionManager">,
-	env: Record<string, string | undefined> = process.env): boolean {
+	env: Record<string, string | undefined> = process.env,
+	beforeAccept?: (ctx: Pick<ExtensionContext, "cwd" | "sessionManager">) => void): boolean {
 	const raw = env[SSH_LAUNCH_ENV];
 	delete env[SSH_LAUNCH_ENV];
 	if (raw === undefined) return false;
@@ -101,6 +102,8 @@ export function consumeSshLaunch(pi: ExtensionAPI, ctx: Pick<ExtensionContext, "
 		if (state.context?.sessionId !== child.sessionId || state.context.localCwd !== child.localCwd
 			|| !state.enabled || state.reason || state.association || !["inactive", "configured"].includes(state.state)
 			|| (state.target && (state.target.destination !== target.destination || state.target.remoteCwd !== target.remoteCwd))) throw new Error("Bootstrap conflicts with shared session state");
+		// Strict fresh-branch eligibility above must run BEFORE selection metadata is appended.
+		beforeAccept?.(ctx);
 		runtime.activate(target); // persists to the CHILD local session; configured, never ready
 		return true;
 	} catch {
@@ -115,7 +118,8 @@ export function consumeSshLaunch(pi: ExtensionAPI, ctx: Pick<ExtensionContext, "
 }
 
 /** Opt-in helper; central registration belongs to step07. Register after registerSshTarget. */
-export function registerSshLaunchBootstrap(pi: ExtensionAPI): void {
+export function registerSshLaunchBootstrap(pi: ExtensionAPI, beforeAccept?: (ctx: ExtensionContext) => void,
+	onRefused?: (ctx: ExtensionContext) => void): void {
 	if (registered.has(pi)) return;
 	if (!getSshTargetRuntime(pi)) throw new Error("Register the shared SSH target runtime first");
 	registered.add(pi);
@@ -126,7 +130,12 @@ export function registerSshLaunchBootstrap(pi: ExtensionAPI): void {
 	pi.on("session_start", (_event, ctx) => {
 		if (!first) return;
 		first = false;
-		try { consumeSshLaunch(pi, ctx, env); }
-		catch { ctx.ui.notify("SSH launch bootstrap refused; explicit target selection is required", "warning"); }
+		try { consumeSshLaunch(pi, ctx, env, () => beforeAccept?.(ctx)); }
+		catch {
+			// Refusal reconstructs a blocked runtime lifecycle. Reopen only that
+			// matching startup context so idle explicit recovery remains possible.
+			onRefused?.(ctx);
+			ctx.ui.notify("SSH launch bootstrap refused; explicit target selection is required", "warning");
+		}
 	});
 }

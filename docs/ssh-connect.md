@@ -1,6 +1,6 @@
 # SSH connection API
 
-The bundle supplies one core-routing adapter and source-checked current-input authority. Registration itself does not connect or read config. See [supported requests](ssh.md#connect).
+The bundle supplies remote-only SSH tools, a branch-local selection controller and source-checked current-input authority. Registration itself does not connect or read config. See [supported requests](ssh.md#connect).
 
 ```ts
 registerSshConnect(pi, adapter, authority);
@@ -11,11 +11,11 @@ registerSshAliasSave(pi, adapter, authority);
 
 `authority.currentRequest(ctx, action, parameters)` must synchronously return exactly `true` for the current user-requested action and exact parameters. Saved state, discovery, model booleans and previous UI approval are not authority. Integrations without a reliable authority source must refuse.
 
-Both actions require the owning local session/cwd, enabled runtime and uncancelled signals. Sequential dispatch plus in-flight guards prevent overlap. Strict schemas reject unknown/secret/approval/backend fields, accessors and non-data objects before effects.
+Both actions require the owning local session/cwd, enabled runtime and uncancelled signals. `ssh_connect` is model-only and sequential: nested/codemode callers cannot connect or replace targets. Bind, validate and clear commands are idle-only. Before connection effects, the selection controller persists prior guarded membership; capture failure blocks connection. Sequential dispatch plus in-flight guards prevent overlap. Strict schemas reject unknown/secret/approval/backend fields, accessors and non-data objects before effects.
 
 Connect requires a concrete destination. `remoteCwd` is optional: omission and literal `~` normalize to remote-home intent. Explicit non-home paths must be absolute. The authority callback receives that normalized request, so a host-only grant cannot authorize an arbitrary absolute path supplied by the model.
 
-Home resolution first revokes prior dispatch and saves a pending destination-only record. A fixed, nonce-framed remote `HOME` query runs under the existing bounded transport; UTF-8, absolute-path and control/length validation precede selection. The resolved evidence retains a runtime/request fence across the caller's await boundary. Only the verified absolute target is activated and saved; a separate quiet cwd validation then commits readiness synchronously after the final authority check. Absolute-path requests skip the home query. Neither operation retries.
+Home resolution first revokes prior dispatch and saves a pending destination-only record. A fixed, nonce-framed remote `HOME` query runs under the existing bounded transport; UTF-8, absolute-path and control/length validation precede selection. The resolved evidence retains a runtime/request fence across the caller's await boundary. Only the verified absolute target is activated and saved; a separate quiet cwd validation then commits readiness synchronously after the final authority check. Absolute-path requests skip the home query. Neither operation retries. Ready membership is declared before the next model request, but data-tool execution requires that generation's fresh turn. A connection result does not authorize SSH data calls from the old response batch.
 
 The bundled lease aborts on new input, steering or lifecycle changes; late results cannot enable dispatch or disconnect newer targets. Pending intent blocks local fallback and older-target restoration, including after reload; it requires a fresh connection request, not `ssh-validate`. Failure burns that input's attempt. No raw SSH command or discovered backend is adopted.
 

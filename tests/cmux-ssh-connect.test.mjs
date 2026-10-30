@@ -227,6 +227,8 @@ test("opt-in registration is inert, idempotent and rejects forged consent parame
 	registerSshConnect(pi, h.adapter, h.authority); registerSshConnect(pi, h.adapter, h.authority);
 	assert.equal(h.tools.size, 1); assert.equal(h.calls.length, 0); assert.equal(h.entries.length, 0);
 	const tool = h.tools.get("ssh_connect");
+	assert.equal(tool.exposure, "model-only");
+	assert.equal(tool.executionMode, "sequential");
 	assert.equal(tool.parameters.additionalProperties, false);
 	assert.deepEqual(tool.parameters.required, ["destination"]);
 	assert.equal(tool.parameters.properties.remoteCwd.default, "~");

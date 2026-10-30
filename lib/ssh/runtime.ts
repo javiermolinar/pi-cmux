@@ -46,6 +46,10 @@ export class SshTargetRuntime {
 	#blocked = false;
 	#busy = false;
 	#generation = 0;
+	#lifecycle = 0;
+	/** Inspection only: observers must not capture dispatch tickets while a mutation is busy. */
+	get generation(): number { return this.#generation; }
+	get lifecycle(): number { return this.#lifecycle; }
 	#controller = new AbortController();
 	#validation: { ticket: ValidationTicket; generation: number; sessionId: string } | undefined;
 	#dispatch = new WeakMap<DispatchTicket, { generation: number; sessionId: string }>();
@@ -69,6 +73,7 @@ export class SshTargetRuntime {
 	/** Session start, reload and tree navigation all reconstruct from the supplied branch. */
 	startSession(context: unknown, entries: readonly unknown[]): void {
 		this.#change(() => {
+			this.#lifecycle++;
 			this.#revoke();
 			this.#context = undefined; this.#target = undefined; this.#association = undefined;
 			this.#blocked = false; this.#reason = undefined;
@@ -182,6 +187,7 @@ export class SshTargetRuntime {
 	}
 	shutdown(): void {
 		this.#change(() => {
+			this.#lifecycle++;
 			this.#revoke(); this.#context = undefined; this.#target = undefined; this.#association = undefined;
 			this.#reason = undefined; this.#blocked = false; this.#settle();
 		});
