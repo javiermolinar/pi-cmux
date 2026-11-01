@@ -25,7 +25,7 @@ function sessionKey(workspaceId, agentId) {
 
 function findAgent(workspaceId, agentId) {
   const w = (data.workspaces() ?? []).find((item) => item.id === workspaceId);
-  const a = w?.agents?.find((item) => item.id === agentId);
+  const a = w && rosterAgents(w).find((item) => item.id === agentId);
   return w && a ? { w, a } : null;
 }
 
@@ -56,7 +56,7 @@ function saveSessionName() {
     return;
   }
   const live = new Set((data.workspaces() ?? []).flatMap((w) =>
-    (w.agents ?? []).map((a) => sessionKey(w.id, a.id))));
+    rosterAgents(w).map((a) => sessionKey(w.id, a.id))));
   const key = sessionKey(target.workspaceId, target.agentId);
   setSessionAliases([...sessionAliases().filter((item) => live.has(item.key) && item.key !== key), { key, name }]);
   cancelSessionName();
@@ -180,12 +180,13 @@ function countAgents(agents) {
 // Lanes are workspace evidence, never a substitute for an individual state.
 // A completed/ended state means "review", not proof of success.
 function workspaceState(w) {
-  const c = countAgents(w.agents ?? []);
+  const agents = rosterAgents(w);
+  const c = countAgents(agents);
   if (c.needs_input || w.unread > 0 || (w.tabs ?? []).some((t) => t.hasUnread)
       || w.status === "needs-attention") return "needs_input";
   if (c.working || w.status === "working") return "working";
   if (c.ended || w.status === "review" || w.status === "done") return "ended";
-  if (c.unknown || !(w.agents ?? []).length) return "unknown";
+  if (c.unknown || !agents.length) return "unknown";
   return "idle";
 }
 
@@ -203,13 +204,28 @@ function tabFor(w, a) {
   return matches.length === 1 ? matches[0] : undefined;
 }
 
+function rosterAgents(w) {
+  // cmux retains prior sessions after /new and supplies them most-recent-first.
+  // Keep one session per exactly resolved live terminal BEFORE any filtering
+  // or state sorting. Never merge unresolved agents by a guessed binding.
+  const seen = new Set();
+  return (w.agents ?? []).filter((a) => {
+    const surfaceId = tabFor(w, a)?.surfaceId;
+    if (!surfaceId) return true;
+    if (seen.has(surfaceId)) return false;
+    seen.add(surfaceId);
+    return true;
+  });
+}
+
 function scopedAgents(w) {
-  return (w.agents ?? []).filter((a) => !attentionOnly()
+  return rosterAgents(w).filter((a) => !attentionOnly()
     || a.status === "needs_input" || tabFor(w, a)?.hasUnread === true);
 }
 
 function currentAgent(w, a) {
-  return w.selected === true && tabFor(w, a)?.focused === true;
+  return w.selected === true && tabFor(w, a)?.focused === true
+    && rosterAgents(w).some((item) => item.id === a.id);
 }
 
 function agentTitle(w, a) {
@@ -268,7 +284,7 @@ const groups = computed(() => {
   }).filter(({ agents }) => agents.length > 0);
 });
 
-// One bounded keyed list. Rollups always include ALL agents in the workspace,
+// One bounded keyed list. Rollups include the complete deduplicated roster,
 // even when search or the display cap hides some. Preserve cmux workspace order.
 const entries = computed(() => {
   const out = [];
@@ -293,9 +309,9 @@ function jumpWorkspace(id) {
 
 function jumpAgent(workspaceId, agentId) {
   // Resolve again at click time: a retained row must not focus a stale surface.
-  const w = (data.workspaces() ?? []).find((item) => item.id === workspaceId);
-  const a = w?.agents?.find((item) => item.id === agentId);
-  if (!w || !a) return;
+  const target = findAgent(workspaceId, agentId);
+  if (!target) return;
+  const { w, a } = target;
   cmux("workspace.select", { workspace_id: w.id });
   const tab = tabFor(w, a);
   if (tab?.surfaceId) {
@@ -322,7 +338,7 @@ function workspaceRow(e) {
         glyph(state),
         Text(() => w().title || "Untitled workspace").font(12).weight("semibold").lineLimit(1).truncation("tail"),
         Spacer({ minLength: 0 }),
-        Text(() => countsText(countAgents(w().agents ?? [])) || "0 agents")
+        Text(() => countsText(countAgents(rosterAgents(w()))) || "0 agents")
           .font(10).monospaced().color("secondary").fixedSize("horizontal"),
       ]),
       Text(() => workspaceMeta(w())).font(10).color("secondary").lineLimit(1).truncation("middle")

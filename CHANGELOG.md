@@ -18,6 +18,7 @@
 
 ### Fixed
 
+- Show only the most recently active tracked session per exactly resolved live terminal in the agent panel. Prevent duplicate rows/highlights after `/new`; apply the same roster to counts, rollups, search, Attention and display caps, and reject stale navigation/naming callbacks. Distinct terminals and unresolved agents remain separate.
 - Resolve cmux 0.65.2's legacy agent Bonsplit IDs through the explicit panel binding and the live tab's RPC surface ID. Refuse stale/ambiguous matches; do not send panel/tab IDs directly to focus. Verified live startup and cross-workspace navigation via installed-runtime event dispatch/native RPCs, plus a native highlight screenshot; mouse hit targets remain unverified.
 - Hide workspaces without tracked agents from the agent state panel in both scopes and search, before display caps apply. Idle and ended agents remain visible; removing the last tracked agent removes its workspace row.
 

@@ -210,6 +210,80 @@ test("current agent requires the selected workspace and an exact focused surface
   assert.equal(current(), false);
 });
 
+test("only the latest session per exact live terminal participates in the roster", () => {
+  const h = logic([{ id: "ws", title: "Project", selected: true,
+    tabs: [{ id: "panel", surfaceId: "surface", focused: true, hasUnread: false }],
+    // cmux supplies sessions most-recent-first, including tied timestamps.
+    agents: [
+      { id: "new", title: "Current task", status: "idle", panelId: "panel", surfaceId: "legacy", lastActivityAt: 100 },
+      { id: "old", title: "Previous task", status: "needs_input", surfaceId: "surface", lastActivityAt: 100 },
+    ] }]);
+  const ids = () => h.json("entries().filter(e => e.kind === 'agent').map(e => e.a.id)");
+  assert.deepEqual(ids(), ["new"]);
+  assert.deepEqual(h.json("totals()"), { needs_input: 0, working: 0, ended: 0, idle: 1, unknown: 0 });
+  assert.equal(h.run("workspaceState(data.workspaces()[0])"), "idle");
+  assert.equal(h.run("countsText(countAgents(rosterAgents(data.workspaces()[0])))"), "○ 1");
+  assert.equal(h.run("currentAgent(data.workspaces()[0], data.workspaces()[0].agents[0])"), true);
+  assert.equal(h.run("currentAgent(data.workspaces()[0], data.workspaces()[0].agents[1])"), false);
+  h.run('setQuery("previous task")');
+  assert.deepEqual(ids(), [], "search cannot resurrect a superseded session");
+  h.run('setQuery(""); setAttentionOnly(true)');
+  assert.deepEqual(ids(), [], "deduplicate before filtering by attention/state");
+  h.state.workspaces[0].tabs[0].hasUnread = true;
+  assert.deepEqual(ids(), ["new"], "surface unread belongs only to the latest session");
+  h.run('jumpAgent("ws", "old"); beginSessionName("ws", "old")');
+  assert.equal(h.actions.length, 0, "stale callbacks cannot navigate to an old session");
+  assert.equal(h.run("renameTarget()"), null);
+  h.run('jumpAgent("ws", "new")');
+  assert.deepEqual(h.actions, [
+    { method: "workspace.select", params: { workspace_id: "ws" } },
+    { method: "surface.focus", params: { workspace_id: "ws", surface_id: "surface" } },
+  ]);
+});
+
+test("roster deduplication preserves distinct terminals, workspaces and unresolved agents", () => {
+  const h = logic([{ id: "ws", selected: true,
+    tabs: [{ id: "panel-1", surfaceId: "s1" }, { id: "panel-2", surfaceId: "s2" }],
+    agents: [
+      { id: "new", panelId: "panel-1", status: "idle" },
+      { id: "other", panelId: "panel-2", status: "ended" },
+      { id: "stale", panelId: "missing", surfaceId: "s1", status: "idle" },
+      { id: "unbound", status: "idle" },
+      { id: "old", surfaceId: "s1", status: "working" },
+    ] }, { id: "other-ws", agents: [{ id: "new", surfaceId: "s1", status: "idle" }],
+      tabs: [{ id: "panel-1", surfaceId: "s1" }] }]);
+  assert.deepEqual(h.json("groups().map(g => g.agents.map(a => a.id))"),
+    [["new", "other", "stale", "unbound"], ["new"]]);
+  assert.equal(h.run("totals().working"), 0);
+  h.state.workspaces[0].tabs.push({ id: "panel-1", surfaceId: "ambiguous" });
+  assert.deepEqual(h.json("rosterAgents(data.workspaces()[0]).map(a => a.id)"),
+    ["new", "other", "stale", "unbound", "old"], "ambiguous bindings never guess ownership");
+});
+
+test("session resets replace aliases and revalidate an open naming form", () => {
+  const w = { id: "ws", tabs: [{ id: "panel", surfaceId: "surface" }],
+    agents: [{ id: "old", title: "Old task", status: "idle", panelId: "panel" }] };
+  const h = logic([w]);
+  h.run('beginSessionName("ws", "old"); setRenameDraft("Old alias"); saveSessionName(); beginSessionName("ws", "old")');
+  w.agents.unshift({ id: "new", status: "idle", panelId: "panel" });
+  h.run('setRenameDraft("Late alias"); saveSessionName()');
+  assert.match(h.run("renameError()"), /no longer tracked/);
+  assert.equal(h.run("agentTitle(data.workspaces()[0], rosterAgents(data.workspaces()[0])[0])"), "Untitled session");
+  assert.equal(h.run("entries().filter(e => e.kind === 'agent').length"), 1);
+});
+
+test("superseded sessions do not consume the agent display cap", () => {
+  const h = logic([{ id: "ws",
+    tabs: Array.from({ length: 7 }, (_, i) => ({ id: `p${i}`, surfaceId: `s${i}` })),
+    agents: [
+      ...Array.from({ length: 20 }, (_, i) => ({ id: `same-${i}`, panelId: "p0", status: "idle" })),
+      ...Array.from({ length: 6 }, (_, i) => ({ id: `other-${i}`, panelId: `p${i + 1}`, status: "idle" })),
+    ] }]);
+  assert.equal(h.run("totals().idle"), 7);
+  assert.equal(h.run("entries().filter(e => e.kind === 'agent').length"), 6);
+  assert.equal(h.run("entries().find(e => e.kind === 'note').message"), "+1 agents · narrow search");
+});
+
 test("caps bound the scene without truncating workspace counts; search reaches hidden agents/workspaces", () => {
   const workspaces = Array.from({ length: 30 }, (_, i) => ({ id: `w-${i}`, title: `Workspace ${i}`,
     agents: Array.from({ length: 20 }, (_, j) => ({ id: `a-${j}`, title: `Task ${j}`, status: "idle" })) }));
@@ -552,6 +626,35 @@ test("installed runtime keeps task labels reactive without rendering Pi as the a
   assert.ok([...h.nodes.values()].some(n => n.id === label.id && n.props.text === "Untitled session"));
   assert.ok(!h.text("Pi"));
   assert.ok(h.text("! unread"));
+  assert.deepEqual(h.logs, []);
+});
+
+test("installed runtime replaces a reset session with one row, count and highlight", runtimeOptions, () => {
+  const h = scene();
+  const w = { id: "ws", title: "Project", selected: true,
+    tabs: [{ id: "panel", surfaceId: "surface", focused: true }],
+    agents: [{ id: "old", title: "-new", status: "needs_input", panelId: "panel" }] };
+  h.set("workspaces", [w]);
+  h.run('beginSessionName("ws", "old"); setRenameDraft("Old alias"); saveSessionName()');
+  assert.ok(h.text("Old alias"));
+  w.agents.unshift({ id: "new", title: "-new", status: "idle", surfaceId: "surface" });
+  h.set("workspaces", [w]);
+  const highlights = () => [...h.nodes.values()].filter(n => n.props.background === "#0A84FF20");
+  assert.ok(!h.text("Old alias"));
+  assert.equal([...h.nodes.values()].filter(n => n.props.text === "-new").length, 1);
+  assert.equal(highlights().length, 1);
+  assert.equal(h.text("-new").props.weight, "semibold");
+  assert.equal([...h.nodes.values()].filter(n => n.props.text === "○ 1").length, 2,
+    "header total and workspace count exclude the old needs-input session");
+  const search = [...h.nodes.values()].find(n => n.type === "textfield");
+  h.dispatch(search.id, "edit", { text: "Old alias" });
+  assert.ok(h.text("No matches"));
+  h.dispatch(search.id, "edit", { text: "" });
+  h.dispatch(highlights()[0].id, "tap");
+  assert.deepEqual(h.actions.map(({ method, params }) => ({ method, params })), [
+    { method: "workspace.select", params: { workspace_id: "ws" } },
+    { method: "surface.focus", params: { workspace_id: "ws", surface_id: "surface" } },
+  ]);
   assert.deepEqual(h.logs, []);
 });
 
