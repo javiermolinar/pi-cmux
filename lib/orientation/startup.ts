@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { childStartupBinding } from "./runtime.ts";
-import { uuid, type Bootstrap } from "./state.ts";
+import { liveBinding, uuid, type Binding, type Bootstrap } from "./state.ts";
 
 export type PiStartup =
 	| { state: "bound"; surfaceId: string; sessionId: string }
@@ -13,6 +13,13 @@ const POLL_MS = 250;
  * changes focus, or treats a missing acknowledgement as proof of failure. */
 export async function waitForPiStartup(
 	pi: ExtensionAPI, seed: Bootstrap | undefined, surface: unknown, check: () => void,
+): Promise<PiStartup> {
+	return waitForPiBinding(seed, surface, (id) => seed ? childStartupBinding(pi, seed, id) : undefined, check);
+}
+
+/** Also used by the standalone panel bootstrap, which has no parent Pi runtime. */
+export async function waitForPiBinding(
+	seed: Bootstrap | undefined, surface: unknown, read: (id: string) => Binding | undefined, check: () => void,
 ): Promise<PiStartup> {
 	const id = uuid(surface);
 	const validate = (): PiStartup | undefined => {
@@ -29,8 +36,10 @@ export async function waitForPiStartup(
 	for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
 		const invalid = validate();
 		if (invalid) return invalid;
-		const binding = childStartupBinding(pi, seed, id);
-		if (binding) return { state: "bound", surfaceId: id, sessionId: binding.sessionId };
+		const binding = read(id);
+		if (binding && liveBinding(binding, { ...seed, sessionId: binding.sessionId })) {
+			return { state: "bound", surfaceId: id, sessionId: binding.sessionId };
+		}
 		if (attempt + 1 < ATTEMPTS) await new Promise<void>(resolve => setTimeout(resolve, POLL_MS));
 	}
 	const invalid = validate();

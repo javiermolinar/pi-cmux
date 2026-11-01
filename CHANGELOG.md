@@ -4,10 +4,22 @@
 
 ### Added
 
+- Repository-only cmux custom right-panel prototype in `examples/sidebars/agent-state-panel.js`: live per-agent symbols/colors, workspace rollups, local foldable groups (search temporarily reveals agents), exact current-agent highlighting, scope/search and workspace-qualified surface navigation. Preserves the stock left sidebar. The launch-bridge experiment remains covered by fixture tests but is not exposed by a panel button. Includes state/scene, launch-fixture and installer regression tests.
+- Default-off `pi-cmux.panel.autoOpen` setting in agent-directory/project Pi settings. When explicitly enabled, interactive startup or `/reload` attempts one `--no-focus` open of the already-installed agent panel in the verified ordinary-local caller's window. Project `false` opts out; no installation, beta enablement, headless/remote/unverified effects, closure watcher or retry.
+- Sidebar-only session aliases through **Name in sidebar…** / **Use automatic name** context-menu actions and a cancellable inline editor. Names remain stable through prompt/status updates, are searchable alongside original task text, and are scoped to workspace + agent. In-memory until panel reload; no tab/workspace renaming or host writes.
+- **Attention** filter in the agent state panel: show explicit needs-input or exact-surface unread agents, combined with scope/search before display caps. Header counts follow the filter; workspace rollups remain complete. No reordering, navigation, notification-read actions or model turns.
 - `/cm` pane switcher: a transient overlay that lists live cmux terminal and browser tabs, filters as you type by workspace, title, URL or agent, and jumps by revalidated surface UUID. A compact 64-column overlay with explicit workspace headers, two-line tab results, pane/tab locations, theme-colored borders, agent states and shortcut hints makes the hierarchy easier to scan. Agent labels come only from cmux metadata; rows fall back to the surface type. Optional `PI_CMUX_SWITCHER_KEY` adds a Pi-local shortcut (`off` by default). No persistence, sidebar change, pane creation or model turn.
+
+### Changed
+
+- Name agent rows by task title or latest prompt, falling back to **Untitled session**, instead of repeating **Pi**. Omit Pi from the secondary metadata line while preserving other agent names and state/unread/subagent details.
+- Remove **+ New Pi** from the agent state panel; keep the panel focused on existing agents and navigation.
+- Remove the agent state panel's footer legend and its divider; retain state symbols/colors and per-agent status labels.
 
 ### Fixed
 
+- Resolve cmux 0.65.2's legacy agent Bonsplit IDs through the explicit panel binding and the live tab's RPC surface ID. Refuse stale/ambiguous matches; do not send panel/tab IDs directly to focus. Verified live startup and cross-workspace navigation via installed-runtime event dispatch/native RPCs, plus a native highlight screenshot; mouse hit targets remain unverified.
+- Hide workspaces without tracked agents from the agent state panel in both scopes and search, before display caps apply. Idle and ended agents remain visible; removing the last tracked agent removes its workspace row.
 - Keep workspace headers visible while scrolling the pane switcher, preserve window and duplicate-workspace disambiguation when filtering, and bound workspace prefixes so long names cannot hide tab titles. Short terminals drop chrome to retain complete results; terminals too small for a result show a resize message and cannot accept an invisible selection.
 - Send long launch commands through a private `/bin/sh` script (`lib/launch-command.ts`) so cmux socket requests stay small. This avoids cmux 0.65.2's 4 KiB request-classification bug ([manaflow-ai/cmux#21222](https://github.com/manaflow-ai/cmux/issues/21222)), where a long prompt intermittently failed with `Socket closed before reply` after creating an empty surface. Commands under 1 KiB stay inline, scripts are `0600` and swept after an hour.
 

@@ -119,7 +119,7 @@ export function shellEscape(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function resolvePathExecutable(name: string): string {
+export function resolvePathExecutable(name: string): string {
 	for (const entry of process.env.PATH?.split(delimiter) ?? []) {
 		// Resolve relative/empty entries in the calling process, before the child cd.
 		const path = resolve(entry || ".", name);
