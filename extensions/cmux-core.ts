@@ -119,7 +119,7 @@ export function shellEscape(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-function resolvePathExecutable(name: string, source = "Minimal Pi PATH"): string {
+export function resolvePathExecutable(name: string, source = "Minimal Pi PATH"): string {
 	// Explicit paths and relative/empty PATH entries resolve before the child cd.
 	const candidates = name.includes("/") ? [resolve(name)]
 		: (process.env.PATH?.split(delimiter) ?? []).map((entry) => resolve(entry || ".", name));

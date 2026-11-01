@@ -28,6 +28,18 @@ Settings go in `~/.pi/agent/settings.json` (or `$PI_CODING_AGENT_DIR/settings.js
 
 Set environment variables before starting Pi. `/reload` cannot import exports from another shell.
 
+### Agent panel auto-open
+
+```json
+{ "pi-cmux": { "panel": { "autoOpen": true } } }
+```
+
+`pi-cmux.panel.autoOpen` defaults to `false`; a project boolean overrides the global boolean. Only literal booleans are accepted; malformed/unreadable settings or invalid panel options disable this attempt. Missing settings inherit normally. No user settings are written automatically.
+
+Requires the separately installed repository prototype at `~/.config/cmux/sidebars/agent-state-panel.js` (a regular file) and interactive Pi in a verified ordinary-local cmux workspace with exact caller UUIDs. It opens **agent-state-panel** once at startup or explicit `/reload`, targets that workspace's window and uses `--no-focus`. It neither installs the panel nor enables cmux's custom-sidebar beta. Unsupported commands, timeouts or other failures never trigger a retry.
+
+There is no visibility watcher: manual closure remains respected for that runtime, and `/new`, `/resume`, `/fork`, session updates and agent turns do not reopen it. Shutdown/session replacement fences pending opens. New Pi processes and explicit extension reloads can make a new configured attempt. Headless/SDK/RPC/print runs, missing panels and remote-owned/unverified workspaces do nothing. Setting `false` stops auto-open; it does not close a panel that cmux restores from its own saved UI state.
+
 ## Pi sessions
 
 ```text

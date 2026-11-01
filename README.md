@@ -94,6 +94,20 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 
 [All settings and shortcuts](docs/usage.md#configuration) · [PATH behavior](docs/usage.md#pi-launch-path) · [Browser privacy](docs/usage.md#browser-annotations)
 
+## Sidebar prototype
+
+A repository-only [agent state right panel](examples/sidebars/README.md) shows live state symbols/colors, foldable workspace groups, exact current-agent highlighting and surface actions only for workspaces with tracked agents (including idle/ended agents). An **Attention** toggle filters to needs-input or exact-surface unread agents. Right-click sessions to assign stable sidebar-only aliases until the panel reloads; automatic names use task titles/latest prompts rather than repeating Pi. The panel has no workspace creation button. It preserves the stock left sidebar. A live startup/cross-workspace RPC smoke and native highlight screenshot passed on cmux 0.65.2; native mouse targets, other layouts and cross-tab/multi-window focus remain unverified.
+
+### Auto-open (opt-in)
+
+After separately installing the prototype panel, add this to Pi's `settings.json`:
+
+```json
+{ "pi-cmux": { "panel": { "autoOpen": true } } }
+```
+
+Defaults to **false**. Project `.pi/settings.json` overrides agent-directory settings, including `false` to opt out. With `true`, startup or explicit `/reload` makes one best-effort, non-focusing open in the verified local caller's window, only if `~/.config/cmux/sidebars/agent-state-panel.js` is an installed regular file. No automatic installation or beta enablement. Headless, remote-owned or unverified contexts are skipped. `/new`, `/resume`, `/fork` and agent activity never reopen it; failures are not retried. Disabling this option does not hide a panel cmux already remembers as open.
+
 ## Compatibility
 
 Bundled Pi tabs/splits and helper terminals require verified local workspace metadata and exact creation UUIDs. Remote-owned or unverified placement is refused. New sidebar workspaces still use create + respawn; cmux's outer login shell may run profiles before the launch PATH takes effect. Standalone legacy Pi launch paths can do the same.

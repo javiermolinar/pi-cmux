@@ -4,7 +4,22 @@
 
 ### Added
 
+- Repository-only cmux custom right-panel prototype in `examples/sidebars/agent-state-panel.js`: live per-agent symbols/colors, workspace rollups, local foldable groups (search temporarily reveals agents), exact current-agent highlighting, scope/search and workspace-qualified surface navigation. Preserves the stock left sidebar. The launch-bridge experiment remains covered by fixture tests but is not exposed by a panel button. Includes state/scene, launch-fixture and installer regression tests.
+- Default-off `pi-cmux.panel.autoOpen` setting in agent-directory/project Pi settings. When explicitly enabled, interactive startup or `/reload` attempts one `--no-focus` open of the already-installed agent panel in the verified ordinary-local caller's window. Project `false` opts out; no installation, beta enablement, headless/remote/unverified effects, closure watcher or retry.
+- Sidebar-only session aliases through **Name in sidebar…** / **Use automatic name** context-menu actions and a cancellable inline editor. Names remain stable through prompt/status updates, are searchable alongside original task text, and are scoped to workspace + agent. In-memory until panel reload; no tab/workspace renaming or host writes.
+- **Attention** filter in the agent state panel: show explicit needs-input or exact-surface unread agents, combined with scope/search before display caps. Header counts follow the filter; workspace rollups remain complete. No reordering, navigation, notification-read actions or model turns.
 - Support `PI_CMUX_BINARY` for Pi-compatible wrapper executables in all child session launches (#3). Resolve and shell-quote executable names/paths in both PATH modes, propagate the resolved override to descendants and reject invalid overrides before creating a pane. Unset/blank values retain the default `pi` behavior; helper terminals are unchanged.
+
+### Changed
+
+- Name agent rows by task title or latest prompt, falling back to **Untitled session**, instead of repeating **Pi**. Omit Pi from the secondary metadata line while preserving other agent names and state/unread/subagent details.
+- Remove **+ New Pi** from the agent state panel; keep the panel focused on existing agents and navigation.
+- Remove the agent state panel's footer legend and its divider; retain state symbols/colors and per-agent status labels.
+
+### Fixed
+
+- Resolve cmux 0.65.2's legacy agent Bonsplit IDs through the explicit panel binding and the live tab's RPC surface ID. Refuse stale/ambiguous matches; do not send panel/tab IDs directly to focus. Verified live startup and cross-workspace navigation via installed-runtime event dispatch/native RPCs, plus a native highlight screenshot; mouse hit targets remain unverified.
+- Hide workspaces without tracked agents from the agent state panel in both scopes and search, before display caps apply. Idle and ended agents remain visible; removing the last tracked agent removes its workspace row.
 
 ## [0.4.1] - 2026-10-30
 
