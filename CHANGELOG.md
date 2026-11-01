@@ -8,7 +8,7 @@
 - Default-off `pi-cmux.panel.autoOpen` setting in agent-directory/project Pi settings. When explicitly enabled, interactive startup or `/reload` attempts one `--no-focus` open of the already-installed agent panel in the verified ordinary-local caller's window. Project `false` opts out; no installation, beta enablement, headless/remote/unverified effects, closure watcher or retry.
 - Sidebar-only session aliases through **Name in sidebar…** / **Use automatic name** context-menu actions and a cancellable inline editor. Names remain stable through prompt/status updates, are searchable alongside original task text, and are scoped to workspace + agent. In-memory until panel reload; no tab/workspace renaming or host writes.
 - **Attention** filter in the agent state panel: show explicit needs-input or exact-surface unread agents, combined with scope/search before display caps. Header counts follow the filter; workspace rollups remain complete. No reordering, navigation, notification-read actions or model turns.
-- `/cm` pane switcher: a transient overlay that lists live cmux terminal and browser tabs, filters as you type by workspace, title, URL or agent, and jumps by revalidated surface UUID. A compact 64-column overlay with explicit workspace headers, two-line tab results, pane/tab locations, theme-colored borders, agent states and shortcut hints makes the hierarchy easier to scan. Agent labels come only from cmux metadata; rows fall back to the surface type. Optional `PI_CMUX_SWITCHER_KEY` adds a Pi-local shortcut (`off` by default). No persistence, sidebar change, pane creation or model turn.
+- Support `PI_CMUX_BINARY` for Pi-compatible wrapper executables in all child session launches (#3). Resolve and shell-quote executable names/paths in both PATH modes, propagate the resolved override to descendants and reject invalid overrides before creating a pane. Unset/blank values retain the default `pi` behavior; helper terminals are unchanged.
 
 ### Changed
 
@@ -20,6 +20,39 @@
 
 - Resolve cmux 0.65.2's legacy agent Bonsplit IDs through the explicit panel binding and the live tab's RPC surface ID. Refuse stale/ambiguous matches; do not send panel/tab IDs directly to focus. Verified live startup and cross-workspace navigation via installed-runtime event dispatch/native RPCs, plus a native highlight screenshot; mouse hit targets remain unverified.
 - Hide workspaces without tracked agents from the agent state panel in both scopes and search, before display caps apply. Idle and ended agents remain visible; removing the last tracked agent removes its workspace row.
+
+## [0.4.1] - 2026-10-30
+
+### Fixed
+
+- Register remote-only `ssh_read`, `ssh_write`, `ssh_edit` and `ssh_bash` instead of claiming core-tool names, allowing local tool extensions to coexist with SSH enabled (#22). Automatically select only counterparts of the prior local selection and guard local file/shell names at direct/nested execution boundaries; `/ssh-clear` restores prior available membership without resetting unrelated tool choices.
+- Report cancellation/timeouts after acknowledged SSH effects as uncertain, not “not dispatched”; retain prior workflow-stage effects and warn against automatic retry. Preserve definite pre-dispatch failures and stale-target rejection.
+- Declare ready SSH tools before the first fresh model request while retaining the transition-batch execution guard.
+- Preserve the restored local tool selection when `/ssh-clear` is followed by exit/resume before another model request. Newer persisted local tool choices take precedence.
+
+### Changed
+
+- Remote integrations must use the `ssh_*` tool names; old core-name transcripts are not reinterpreted or replayed remotely. `PI_CMUX_SSH=0` disables SSH execution rather than resolving tool ownership conflicts. Core-tool renderers such as pi-tool-display do not automatically render the new names.
+
+### Documentation
+
+- Replace exclusive-adapter guidance with the SSH selection/state matrix, disablement and restoration rules, local-extension boundaries and migration limits. Add real Pi 1.3.0/1.4.0 SDK coexistence/QuickJS/lifecycle regressions with a display-equivalent owner in both load orders. Record a bounded [live SSH smoke](docs/ssh-isolation-live-validation.md) on Pi 1.4.0 in both fixture load orders; real-package rendering and live cancellation/fault injection remain unverified.
+
+## [0.4.0] - 2026-10-28
+
+### Added
+
+- `/cm` pane switcher: a transient overlay that lists live cmux terminal and browser tabs, filters as you type by workspace, title, URL or agent, and jumps by revalidated surface UUID. A compact 64-column overlay with explicit workspace headers, two-line tab results, pane/tab locations, theme-colored borders, agent states and shortcut hints makes the hierarchy easier to scan. Agent labels come only from cmux metadata; rows fall back to the surface type. Optional `PI_CMUX_SWITCHER_KEY` adds a Pi-local shortcut (`off` by default). No persistence, sidebar change, pane creation or model turn.
+
+### Changed
+
+- Default Pi placement by task relationship: independent tasks use workspaces; the first active same-task agent/reviewer uses a right split; additional/background collaborators and handoffs use tabs. Explicit placement wins. Reuse existing origin identities and remember up to 64 exact children per creator in memory; expose binding-only child snapshots in launch results without claiming task completion, supervising processes or adding a persistent registry.
+- Use project-based naming defaults: new Pi workspaces use the repository/directory name, tabs prefer available task names, and direct/resumed sessions no longer fall back to generic `Pi` when project context exists. Preserve explicit launch titles and `/name`, reuse session names for handoffs, and keep naming separate from appended host instructions. No additional model requests; existing workspaces are not renamed.
+
+### Fixed
+
+- Disable the entire extension bundle quietly outside verified cmux terminals, including inherited/stale surface environments. Check the caller before registering commands, tools, shortcuts or hooks to avoid orientation startup warnings in other terminals.
+- Default SSH connections to the remote account's home when cwd is omitted, and accept literal `~` in `ssh_connect` and `/ssh-bind`. Resolve remote `HOME` under bounded framed transport before saving an absolute target; retain pending destination intent so failed or interrupted resolution cannot fall back locally on reload. Invalid explicit paths still require clarification.
 - Keep workspace headers visible while scrolling the pane switcher, preserve window and duplicate-workspace disambiguation when filtering, and bound workspace prefixes so long names cannot hide tab titles. Short terminals drop chrome to retain complete results; terminals too small for a result show a resize message and cannot accept an invisible selection.
 - Send long launch commands through a private `/bin/sh` script (`lib/launch-command.ts`) so cmux socket requests stay small. This avoids cmux 0.65.2's 4 KiB request-classification bug ([manaflow-ai/cmux#21222](https://github.com/manaflow-ai/cmux/issues/21222)), where a long prompt intermittently failed with `Socket closed before reply` after creating an empty surface. Commands under 1 KiB stay inline, scripts are `0600` and swept after an hour.
 

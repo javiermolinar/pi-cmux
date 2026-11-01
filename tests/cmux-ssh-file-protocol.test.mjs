@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { createFileCommand, SshFileProtocolError } from "../lib/ssh/file-protocol.ts";
-import { SSH_MAX_OUTPUT } from "../lib/ssh/transport.ts";
+import { SSH_MAX_OUTPUT, shellQuote } from "../lib/ssh/transport.ts";
 
 const operations = ["read", "write", "mkdir", "access", "edit-access"];
 const frame = (command, payload = Buffer.alloc(0), length = String(payload.length)) => Buffer.concat([
@@ -139,6 +139,22 @@ test("real local bash emits zero-length frames and binary read bytes without enc
 	assert.equal(result.status, 0);
 	assert.deepEqual(command.decode(result.stdout), input);
 	assert.equal(result.stderr.length, 0);
+});
+
+test("the fixed home query frames the remote HOME literally with byte-correct Unicode lengths", () => {
+	const command = createFileCommand("home", "/");
+	for (const home of ["/home/remote", "/home/space ' café 🌍 $HOME $(printf BAD >&2) `printf BAD >&2`"]) {
+		const result = run(command, { before: `HOME=${shellQuote(home)}` });
+		assert.equal(result.status, 0);
+		assert.equal(result.stderr.length, 0, "home contents are never evaluated");
+		assert.equal(command.decode(result.stdout).toString("utf8"), home);
+		refused(command, Buffer.concat([Buffer.from("notice\n"), result.stdout]));
+		refused(command, Buffer.concat([result.stdout, Buffer.from("notice\n")]));
+	}
+	for (const before of ["unset HOME", "HOME=relative", "HOME=''"]) {
+		const result = run(command, { before });
+		assert.equal(result.status, 1); assert.equal(result.stdout.length, 0);
+	}
 });
 
 test("writes keep binary and Unicode content exclusively on stdin", () => {

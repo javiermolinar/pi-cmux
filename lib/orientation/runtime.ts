@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { execCmux } from "../../extensions/cmux-core.ts";
+import { execCmux, getProjectName } from "../../extensions/cmux-core.ts";
 import { locateSurface } from "./navigation.ts";
+import { hasSshIntent } from "../ssh/launch.ts";
+import { getSshTargetRuntime } from "../ssh/runtime.ts";
 import { childNavigationHint, navigationHints, NAVIGATION_MESSAGE, resolveReturnShortcut } from "./hints.ts";
 import {
 	BINDING_TTL_MS, BOOTSTRAP_ENV, ORIENTATION_ENTRY, BindingStore, childBootstrap, decodeBootstrap,
@@ -12,6 +14,31 @@ import {
 
 const runtimes = new WeakMap<ExtensionAPI, OrientationRuntime>();
 export interface RelationOptions { related?: boolean; role?: "chat" | "review" | "continue" }
+export interface ChildConversation {
+	taskId: string;
+	conversationId: string;
+	role: Role;
+	parentConversationId: string;
+	parentSessionId: string;
+	surfaceId: string;
+	placement: "workspace" | "right" | "down" | "tab";
+	sessionId?: string;
+	binding: "unconfirmed" | "bound" | "unknown";
+}
+
+/** Best-effort direct children of the current conversation, not a process/task monitor. */
+export function conversationChildren(pi: ExtensionAPI): ChildConversation[] {
+	return currentConversation(pi) ? runtimes.get(pi)!.children() : [];
+}
+
+export function rememberChildConversation(pi: ExtensionAPI, seed: Bootstrap | undefined, surface: unknown, placement: ChildConversation["placement"]): void {
+	const own = currentConversation(pi), origin = seed?.origin, surfaceId = uuid(surface);
+	if (!own || !seed || !origin || !surfaceId || surfaceId === own.target.surfaceId
+		|| origin.sessionId !== own.state.sessionId || origin.conversationId !== own.state.conversationId
+		|| origin.taskId !== own.state.taskId || origin.role !== own.state.role || origin.target.surfaceId !== own.target.surfaceId) return;
+	runtimes.get(pi)!.rememberChild({ taskId: seed.taskId, conversationId: seed.conversationId, role: seed.role,
+		parentConversationId: origin.conversationId, parentSessionId: origin.sessionId, surfaceId, placement, binding: "unconfirmed" });
+}
 
 export function validateRelation(options: RelationOptions): void {
 	if (options.related !== undefined && typeof options.related !== "boolean") throw new Error("related must be a boolean");
@@ -66,6 +93,7 @@ export class OrientationRuntime {
 	readonly token = randomUUID();
 	readonly returnShortcut = resolveReturnShortcut(process.env.PI_CMUX_RETURN_KEY);
 	private generation = 0;
+	private readonly childConversations = new Map<string, ChildConversation>();
 	private timer: ReturnType<typeof setInterval> | undefined;
 	private consumedBootstrap = false;
 	private context: ExtensionContext | undefined;
@@ -73,11 +101,28 @@ export class OrientationRuntime {
 	private renameQueue: Promise<unknown> = Promise.resolve();
 	private titleVersion = 0;
 	private topic = "Pi";
+	private fallbackTopic = "Pi";
 	readonly pi: ExtensionAPI;
 	readonly store: BindingStore;
 	constructor(pi: ExtensionAPI, store: BindingStore) { this.pi = pi; this.store = store; }
 
+	rememberChild(child: ChildConversation): void {
+		this.childConversations.set(child.conversationId, { ...child });
+		// Bound memory; no prompts, cross-process registry, or recovery scan.
+		if (this.childConversations.size > 64) this.childConversations.delete(this.childConversations.keys().next().value!);
+	}
+	children(): ChildConversation[] {
+		return [...this.childConversations.values()].map(child => {
+			const binding = this.store.read(child.surfaceId);
+			if (binding && liveBinding(binding, { ...child, sessionId: child.sessionId ?? binding.sessionId })) {
+				child.sessionId ??= binding.sessionId;
+				child.binding = "bound";
+			} else if (binding || child.sessionId) child.binding = "unknown";
+			return { ...child };
+		});
+	}
 	stop(): void {
+		this.childConversations.clear();
 		this.generation++;
 		this.lifecycle.abort();
 		this.lifecycle = new AbortController();
@@ -96,7 +141,7 @@ export class OrientationRuntime {
 	}
 	async renameTopic(topic: string, signal?: AbortSignal): Promise<boolean> {
 		if (!this.state || !this.target || signal?.aborted) return false;
-		this.topic = topicText(topic) || this.state.topic;
+		this.topic = topicText(topic) || this.fallbackTopic;
 		const version = ++this.titleVersion, generation = this.generation;
 		const state = this.state, target = this.target;
 		const jobSignal = signal ? AbortSignal.any([signal, this.lifecycle.signal]) : this.lifecycle.signal;
@@ -154,7 +199,7 @@ export class OrientationRuntime {
 		} };
 	}
 	manualTitle(ctx: ExtensionContext): void {
-		if (this.state) void this.renameTopic(ctx.sessionManager.getSessionName() || this.state.topic);
+		if (this.state) void this.renameTopic(ctx.sessionManager.getSessionName() || this.fallbackTopic);
 	}
 	private renew(): void {
 		if (!this.state || !this.target) return;
@@ -192,7 +237,14 @@ export class OrientationRuntime {
 			}
 		}
 		const restored = Boolean(state) && !seed;
+		const remote = getSshTargetRuntime(this.pi)?.snapshot().target;
+		const project = topicText(hasSshIntent(this.pi)
+			? basename(remote?.remoteCwd ?? "") || "Pi"
+			: await getProjectName(this.pi, ctx.cwd)) || "Pi";
+		if (generation !== this.generation) return;
 		state ??= rootOrientation(owner);
+		// Upgrade old generic defaults without changing saved task/conversation IDs.
+		this.fallbackTopic = state.topic && state.topic !== "Pi" ? state.topic : project;
 		this.state = state;
 		this.context = ctx;
 		this.target = { windowId, workspaceId, paneId, surfaceId };
@@ -203,7 +255,7 @@ export class OrientationRuntime {
 			this.timer = setInterval(() => { try { this.renew(); } catch { this.stop(); } }, 5000);
 			this.timer.unref();
 			this.showOrigin();
-			let topic = ctx.sessionManager.getSessionName() || state.topic;
+			let topic = seed ? state.topic : ctx.sessionManager.getSessionName() || this.fallbackTopic;
 			if (!seed && !ctx.sessionManager.getSessionName()) {
 				for (const entry of [...ctx.sessionManager.getBranch()].reverse()) {
 					if (entry.type !== "custom" || entry.customType !== "pi-cmux.autotitle") continue;
@@ -212,7 +264,7 @@ export class OrientationRuntime {
 					break;
 				}
 			}
-			void this.renameTopic(seed ? state.topic : topic);
+			void this.renameTopic(topic);
 		} catch (error) { this.stop(); throw error; }
 	}
 }

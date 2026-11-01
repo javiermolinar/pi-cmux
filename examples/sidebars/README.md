@@ -121,9 +121,9 @@ Tests cover default-off opt-in startup, project overrides, headless/missing-pane
 
 When the installed macOS `SidebarRuntime.js` exists, seven scene tests use that **real bundled JS runtime** in a Node VM to check reactive rows, context-menu naming/editor events, UI events, the absence of the New Pi button, retained internal form helpers and bounded scene size. Otherwise they skip; `CMUX_SIDEBAR_RUNTIME=/path/to/SidebarRuntime.js` enables them. A separate local Swift/JavaScriptCore fixture check also passed. These checks do not establish native SwiftUI layout or live workspace creation/focus behavior.
 
-Current local results: **1,131 passed, 14 skipped, 0 failed** in the full suite; all **103** focused panel/bootstrap/startup tests passed. Typecheck, package dry-run, JavaScriptCore fixture execution and `git diff --check` passed. The panel, installer and bridge remain excluded from the npm payload.
+Current local results: **1,379 passed, 14 skipped, 0 failed** in the full suite; all **103** focused panel/bootstrap/startup tests passed. Typecheck, package dry-run, JavaScriptCore fixture execution and `git diff --check` passed. The panel, installer and bridge remain excluded from the npm payload.
 
-The unchanged pinned dependencies report two audit advisories (moderate in `@earendil-works/pi-coding-agent`, high in transitive `undici`). No dependency changes were made.
+After integrating current main's pinned Pi 1.4.0 development dependency, npm audit reports three advisories (moderate in `@earendil-works/pi-coding-agent` and `minimatch`, high in transitive `undici`). Package versions/lockfile otherwise match main; no dependency fixes were made.
 
 ## API evidence
 

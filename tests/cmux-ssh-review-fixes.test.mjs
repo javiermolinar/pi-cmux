@@ -7,8 +7,10 @@ const target = { destination: "fixture", remoteCwd: "/remote" };
 const success = (stdout = Buffer.alloc(0)) => ({ exitCode: 0, stdout, stderr: Buffer.alloc(0) });
 function host(id) {
 	const tools = new Map(), handlers = new Map(), records = [];
+	let active = ["read", "write", "edit", "bash"];
 	const pi = { on(name, fn) { const list = handlers.get(name) ?? []; list.push(fn); handlers.set(name, list); },
-		registerTool: tool => tools.set(tool.name, tool), registerCommand() {}, appendEntry: (type, data) => records.push({ type: "custom", customType: type, data }) };
+		registerTool: tool => tools.set(tool.name, tool), registerCommand() {}, appendEntry: (type, data) => records.push({ type: "custom", customType: type, data }),
+		getActiveTools: () => [...active], setActiveTools: names => { active = [...names]; } };
 	const ctx = { cwd: "/local/review-fix", hasUI: false, isIdle: () => false,
 		sessionManager: { getSessionId: () => id, getBranch: () => records, getSessionFile: () => undefined }, ui: { notify() {}, setStatus() {} } };
 	return { pi, ctx, tools, async emit(name, event = {}) { for (const fn of handlers.get(name) ?? []) await fn(event, ctx); },
@@ -95,7 +97,7 @@ function fileHost(id, options = {}) {
 	} } });
 	return { ...h, adapter, runtime: adapter.runtime, contents: () => contents, writes: () => writes, attempts: () => attempts };
 }
-async function ready(h) { await h.emit("session_start"); h.runtime.activate(target); await h.adapter.validate(); }
+async function ready(h) { await h.emit("session_start"); h.adapter.selection.prepare(h.ctx); h.runtime.activate(target); await h.adapter.validate(); await h.emit("turn_start"); }
 
 test("R1 probes stay non-ready until a synchronous authorized commit and are single-use", async () => {
 	const h = fileHost("commit-boundary"); await h.emit("session_start"); h.runtime.activate(target);
@@ -128,7 +130,7 @@ test("R2 noisy validation is refused without granting readiness or attempting fi
 
 test("R2 notice during read is not persisted by a successful edit", async () => {
 	const h = fileHost("noisy-read", { readNoise: "SHELL STARTUP NOTICE\n" }); await ready(h);
-	await assert.rejects(h.call("edit", { path: "fixture.txt", edits: [{ oldText: "OLD", newText: "NEW" }] }), /Invalid SSH file response/);
+	await assert.rejects(h.call("ssh_edit", { path: "fixture.txt", edits: [{ oldText: "OLD", newText: "NEW" }] }), /Invalid SSH file response/);
 	assert.equal(h.contents().toString(), "OLD\n"); assert.equal(h.writes(), 0);
 	assert.throws(() => h.runtime.captureDispatch(), /not ready/);
 });
@@ -140,7 +142,7 @@ test("R2 malformed or trailing read frames fail before edit writes", async () =>
 		bytes => Buffer.from("invalid length or missing frame"),
 	]) {
 		const h = fileHost("corrupt-read", { corruptRead }); await ready(h);
-		await assert.rejects(h.call("edit", { path: "fixture.txt", edits: [{ oldText: "OLD", newText: "NEW" }] }), /Invalid SSH file response/);
+		await assert.rejects(h.call("ssh_edit", { path: "fixture.txt", edits: [{ oldText: "OLD", newText: "NEW" }] }), /Invalid SSH file response/);
 		assert.equal(h.writes(), 0); assert.equal(h.contents().toString(), "OLD\n");
 	}
 });
@@ -148,13 +150,13 @@ test("R2 malformed or trailing read frames fail before edit writes", async () =>
 test("R2 legitimate notice-like file text and Unicode remain exact payload data", async () => {
 	const original = "SHELL STARTUP NOTICE\nOLD café 🌍\n";
 	const h = fileHost("real-file-notice", { content: Buffer.from(original) }); await ready(h);
-	await h.call("edit", { path: "fixture.txt", edits: [{ oldText: "OLD", newText: "NEW" }] });
+	await h.call("ssh_edit", { path: "fixture.txt", edits: [{ oldText: "OLD", newText: "NEW" }] });
 	assert.equal(h.contents().toString(), original.replace("OLD", "NEW")); assert.equal(h.writes(), 1);
 });
 
 test("R2 write acknowledgement noise is uncertain, never retried or rolled back", async () => {
 	const h = fileHost("uncertain-ack", { writeNoise: "late account notice\n" }); await ready(h);
-	await assert.rejects(h.call("edit", { path: "fixture.txt", edits: [{ oldText: "OLD", newText: "NEW" }] }), error => error.uncertain === true && /do not.*retry/i.test(error.message));
+	await assert.rejects(h.call("ssh_edit", { path: "fixture.txt", edits: [{ oldText: "OLD", newText: "NEW" }] }), error => error.uncertain === true && /do not.*retry/i.test(error.message));
 	assert.equal(h.contents().toString(), "NEW\n"); assert.equal(h.writes(), 1);
 	assert.equal(h.attempts(), 4); // Validation, access, read, write: no reconnect or replay.
 	assert.throws(() => h.runtime.captureDispatch(), /not ready/);

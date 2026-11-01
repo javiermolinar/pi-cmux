@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { randomUUID } from "node:crypto";
+import { basename } from "node:path";
 import { openPiSession } from "../extensions/cmux-pi.ts";
 import startExtension from "../extensions/cmux-start.ts";
 import { resolveHandoffTarget } from "../extensions/cmux-continue.ts";
@@ -120,6 +121,14 @@ test("fresh/related/review/resumed SSH Pi stays local and child selection is onl
 	}
 });
 
+test("an unnamed SSH Pi launch uses the selected remote directory, not the local project", async () => {
+	const h = harness(); h.ready();
+	const result = await openPiSession(h.pi, h.ctx.cwd, { placement: "tab", focus: false });
+	assert.equal(result.ok, true);
+	assert.equal(result.title, basename(target.remoteCwd));
+	assert.equal(h.calls.some(call => call.file === "git"), false);
+});
+
 test("bootstrap consumes once, rejects replay/foreign owner/cwd/saved conflicts without connecting", () => {
 	const parent = harness(); parent.ready();
 	const raw = envelope(parent), child = harness({ session: "child" });
@@ -163,6 +172,16 @@ test("matching resumed metadata stays configured and foreign restored sessions f
 	assert.equal(foreign.runtime.snapshot().state, "disconnected");
 	foreign.runtime.activate(target); // refusal retains the local owner for explicit recovery
 	assert.equal(foreign.runtime.snapshot().state, "configured");
+});
+
+test("child bootstrap cannot replace unresolved connection intent saved on the current branch", () => {
+	const parent = harness(); parent.ready();
+	const child = harness({ session: "child", sessionFile: "/resume.jsonl", branch: [{ type: "custom", customType: "pi-cmux.ssh-target", data: {
+		version: 1, kind: "pending", sessionId: "child", localCwd: "/local/project", destination: "another-host",
+	} }] });
+	assert.throws(() => consume(child, envelope(parent, "/resume.jsonl")), /refused/);
+	assert.equal(child.runtime.snapshot().state, "disconnected");
+	assert.equal(child.calls.length, 0);
 });
 
 test("opt-in bootstrap registration shares runtime, strips env synchronously, never replays on session start", async () => {

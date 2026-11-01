@@ -52,6 +52,18 @@ These start independent chats. Explicit paths need no zoxide; fuzzy queries do. 
 
 Ask Pi to start a session to use `cmux_start_pi`. It accepts workspace/right/down/tab placement, title, focus, provider/model and thinking. `cwd` accepts existing absolute, relative or `~/…` directories; omission keeps the current directory. It cannot accompany `continueSession: true`. Sessions focus by default; `focus: false` opens in the background.
 
+Placement follows the task relationship unless explicitly supplied:
+
+| Launch | Default placement |
+|---|---|
+| Independent task | New sidebar workspace |
+| First active same-task agent or reviewer | Right split beside its creator |
+| Further same-task agents after a remembered same-task split | Tab in the caller's workspace |
+| Background same-task agent (`focus: false`) | Tab |
+| Handoff (`continueSession: true` or `role: "continue"`) | Tab |
+
+Explicit placement always wins, including a separate workspace for a reviewer. Repository changes alone do not select placement: use `related: true` or `role: "review"` for the same task, even across directories. `/cmn` stays independent; explicit split/continuation commands retain their directions.
+
 ### Pi startup guard
 
 `cmux_start_pi` distinguishes creation, command dispatch, and observed Pi startup. After a confirmed launch dispatch, it checks the exact returned surface UUID for the launched conversation’s live orientation binding for up to 10 seconds.
@@ -64,9 +76,17 @@ The owning parent UI receives startup warnings/errors without a new model turn. 
 
 ### Pi launch PATH
 
-Default `PI_CMUX_PI_PATH_MODE=minimal` resolves executable Pi/Node directories on caller PATH, invokes Pi by absolute path and prepends those directories to the child's own PATH. Relative entries resolve before changing cwd. Both PATH modes propagate to child Pi launches. Missing executables in minimal mode or an invalid mode stop creation without fallback.
+Set `PI_CMUX_BINARY` before starting Pi to use a Pi-compatible wrapper for all child sessions (workspaces, splits, tabs and handoffs):
 
-Other tools may resolve differently or be missing. To preserve caller PATH:
+```sh
+export PI_CMUX_BINARY=sumocode
+```
+
+Unset or blank values default to `pi`. Supply one executable name or path, not arguments or shell code; aliases/functions and `~` expansion are not supported. Names resolve on the caller's PATH; relative paths resolve from the calling Pi process's working directory before the child changes cwd. Overrides are checked for executability in both PATH modes, shell-quoted and passed to descendants as absolute paths. Invalid overrides stop creation without falling back to `pi`. Wrappers must accept and forward Pi's CLI arguments, including `--session`, provider/model/thinking options and the `--` prompt separator.
+
+Default `PI_CMUX_PI_PATH_MODE=minimal` resolves the selected executable and Node, invokes the executable by absolute path and prepends their directories to the child's own PATH. Relative PATH entries resolve before changing cwd. Both PATH modes propagate to child Pi launches. Missing executables in minimal mode or an invalid mode stop creation without fallback.
+
+Other tools, including a wrapper's underlying `pi`, may resolve differently or be missing. To preserve caller PATH:
 
 ```sh
 export PI_CMUX_PI_PATH_MODE=full
@@ -86,6 +106,10 @@ Tabs show topic, role and task tag: `Check login · review [ab12]`. Tags are lab
 | `continueSession: true`, `/cmcv`, `/cmch` | Same task with handoff context |
 
 `related: false` conflicts with review/continue. Writing “review” in a slash prompt does not select a role.
+
+The creator remembers up to 64 successfully dispatched children in memory, using exact task/conversation/parent/surface identities. `cmux_start_pi` results expose these direct relationships in `details.children`. Binding states are `unconfirmed` (no live child binding observed), `bound` (exact live identity observed), or `unknown` (binding lost, invalid or replaced). None proves task readiness or completion. Remembered same-task splits continue to favor tabs when their bindings become unknown; inspect cmux rather than automatically replacing them.
+
+This is best effort, not a shared task-tree service: each creator knows only its own launches. Reload, session replacement and tree navigation clear child memory; existing parent/origin metadata still follows the session. Launches without an active orientation runtime or exact created UUID cannot be tracked. There is no layout reconstruction, child termination, automatic cleanup, or execution/messaging permission from the hierarchy.
 
 ### Return to the exact conversation
 
@@ -154,7 +178,7 @@ Same-checkout handoffs include a summary and available conversation branch. Work
 
 Or ask Pi to use `cmux_open_terminal`. Local helpers preserve caller PATH and run `/bin/sh -c`. They require a verified local workspace, creation capabilities and exact UUIDs; startup uses one local-context RPC. Naming is best-effort after creation, including protected Pi tabs/splits. Workspace/legacy Pi paths name before respawn. Creation is not command completion.
 
-With a ready SSH target, helpers default to remote cwd/PATH. Use `/cmt --local k9s` or tool `target: "local"` for the Mac; `--remote` requires readiness. Non-ready remote intent never falls back locally. See [SSH usage](ssh.md) and [helper compatibility/evidence](ssh-terminal.md).
+`Connect to javi` defaults to the remote account's home; `in ~` is equivalent, while an explicit project path must be absolute. Home resolution never uses your Mac's home directory. With a ready SSH target, helpers default to remote cwd/PATH. Use `/cmt --local k9s` or tool `target: "local"` for the Mac; `--remote` requires readiness. Non-ready remote intent never falls back locally. See [SSH usage](ssh.md) and [helper compatibility/evidence](ssh-terminal.md).
 
 ## Browser splits
 
@@ -177,6 +201,13 @@ Turning Annotate off keeps the draft; navigation can lose it. Up to four bridges
 Approval can start a Pi turn; queued is not processed. Navigation/cancellation can race dispatch. Annotations do not expose model click/typing tools.
 
 ## Conversation tab titles
+
+Naming uses the project and an available task name without an extra model request:
+
+- **New Pi workspaces:** repository basename, or directory basename outside git. An explicit launch `title` overrides this default. Existing workspaces are not renamed. SSH tab fallbacks use the selected remote directory name without probing the local repository.
+- **Tabs:** use the launch title or task prompt, an existing session name, or a saved topic when available. Without a task name, use the project name instead of `Pi`. Tracked sessions retain their role/task tag, for example `Fix login · review [ab12]` or `pi-cmux · main [ab12]`.
+- **Explicit names:** `/name` wins over the fallback. Launch titles are not automatically suffixed with the project name. Handoffs reuse an available session name; empty chats and directory jumps use the project fallback.
+- **Reload/resume:** old generic `Pi` defaults upgrade to the project label without changing conversation identity. Saved task names remain available even when model-generated naming is off.
 
 Model-generated topics default to off. Enable `PI_CMUX_AUTOTITLE=1` or `"pi-cmux": { "autotitle": true }` in settings.
 
@@ -206,7 +237,7 @@ Default `detailed` shows status, progress, tokens and logs. `minimal` shows stat
 
 ## Notifications
 
-Off by default. Set `PI_CMUX_NOTIFY_LEVEL` to `all`, `medium` (completion/error) or `low` (error). Notifications wait for settlement and normally require interactive Pi inside cmux. `PI_CMUX_NOTIFY_FORCE=1` bypasses that context guard, not the level.
+Off by default. Set `PI_CMUX_NOTIFY_LEVEL` to `all`, `medium` (completion/error) or `low` (error). Notifications wait for settlement and normally require interactive Pi inside cmux. `PI_CMUX_NOTIFY_FORCE=1` bypasses that notification context guard, not the level or the bundle's verified-cmux startup check.
 
 `PI_CMUX_NOTIFY_INCLUDE_RESPONSE=1` includes up to 500 response characters; leave off for sensitive conversations. Other settings: `PI_CMUX_NOTIFY_TITLE=Pi`, `PI_CMUX_NOTIFY_THRESHOLD_MS=15000`, `PI_CMUX_NOTIFY_DEBOUNCE_MS=3000`.
 
@@ -236,7 +267,7 @@ Use `/edit src/auth.ts`, `/dev` or `/logs`. Options: `run`, `acceptArgs`, `direc
 
 ## Compatibility
 
-Workspace/browser behavior was tested with cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher with **0.65.2**. The switcher was smoke-tested on 0.65.2 for multi-tab jumps inside one workspace and for exact focus back to the caller; several workspaces/windows and browser targets were exercised with fixtures, not live cmux, and remain unverified live. The 0.3.0 [local startup smoke](startup-smoke.md) passed for one no-prompt sidebar workspace and one protected local-context tab on **0.65.2** with Pi **1.4.0**, including exact child bindings and independent local process/cwd checks. Splits, other native layouts, long prompts and live transport failures remain unverified; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
+Workspace/browser behavior was tested with cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher with **0.65.2**. The switcher was smoke-tested on 0.65.2 for multi-tab jumps inside one workspace and for exact focus back to the caller; several workspaces/windows and browser targets were exercised with fixtures, not live cmux, and remain unverified live. The 0.3.0 [local startup smoke](startup-smoke.md) passed for one no-prompt sidebar workspace and one protected local-context tab on **0.65.2** with Pi **1.4.0**, including exact child bindings and independent local process/cwd checks. A later [task-aware reviewer smoke](startup-smoke.md#task-aware-placement-follow-up) confirmed omitted placement resolving to a right split with an exact child binding. Other split/native-layout cases, long prompts and live transport failures remain unverified; no minimum cmux version is certified for protected creation. Missing capabilities or ambiguous identity fail without retry/substitute placement.
 
 Launch commands longer than 1 KiB are sent as a short `/bin/sh` wrapper around a private `0600` script, so cmux socket requests stay small; this avoids cmux 0.65.2's 4 KiB request-classification bug ([#21222](https://github.com/manaflow-ai/cmux/issues/21222)), where long prompts could create a pane and then fail with `Socket closed before reply`. Leftover scripts are removed after an hour.
 

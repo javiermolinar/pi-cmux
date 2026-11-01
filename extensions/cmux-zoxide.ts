@@ -99,7 +99,7 @@ async function openPiInZoxideSplit(
 		const targetResult = await resolveZoxideTarget(pi, query, ctx.cwd, commandName);
 		launch.check();
 		if (!targetResult.ok) return targetResult;
-		return await openPiSession(pi, targetResult.path, { placement: direction, title: "Pi" }, "Pi", () => launch.check());
+		return await openPiSession(pi, targetResult.path, { placement: direction }, "Pi", () => launch.check());
 	} finally { launch.close(); }
 }
 

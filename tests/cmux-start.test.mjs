@@ -12,6 +12,7 @@ import piCmuxExtension from "../extensions/index.ts";
 const { parseArgs } = await import(new URL("./cli/args.js", import.meta.resolve("@earendil-works/pi-coding-agent")).href);
 const gitEnv = () => ({ ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" });
 const commandOffset = args => args[0] === "--json" ? (args[1] === "--id-format" ? 3 : 1) : 0;
+const BUNDLE_SURFACE = "11111111-1111-4111-8111-111111111111";
 const EMPTY_USAGE = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
 function assistant(content = [{ type: "text", text: "Previous implementation details" }]) {
@@ -19,6 +20,11 @@ function assistant(content = [{ type: "text", text: "Previous implementation det
 }
 
 function harness(t, options = {}) {
+	if (options.extension === piCmuxExtension) {
+		const previous = process.env.CMUX_SURFACE_ID;
+		process.env.CMUX_SURFACE_ID = BUNDLE_SURFACE;
+		t.after(() => { if (previous === undefined) delete process.env.CMUX_SURFACE_ID; else process.env.CMUX_SURFACE_ID = previous; });
+	}
 	const root = realpathSync(mkdtempSync(join(tmpdir(), "pi-cmux-start-")));
 	t.after(() => rmSync(root, { recursive: true, force: true }));
 	const cwd = join(root, "project's files");
@@ -58,7 +64,8 @@ function harness(t, options = {}) {
 			const subcommand = args[commandOffset(args)];
 			if (options.fail === subcommand) return { code: 1, killed: false, stdout: "", stderr: `${subcommand} failed` };
 			let response = {};
-			if (subcommand === "identify") response = { caller: { window_ref: "window:1", workspace_ref: "workspace:1", pane_ref: "pane:1", surface_ref: "surface:1" } };
+			if (subcommand === "identify") response = { caller: { window_ref: "window:1", workspace_ref: "workspace:1", pane_ref: "pane:1", surface_ref: "surface:1",
+				...(options.extension === piCmuxExtension ? { window_id: BUNDLE_SURFACE, workspace_id: BUNDLE_SURFACE, pane_id: BUNDLE_SURFACE, surface_id: BUNDLE_SURFACE } : {}) } };
 			else if (subcommand === "list-panes") response = { panes: [{ ref: "pane:1", surface_refs: ["surface:1"] }] };
 			else if (subcommand === "workspace") {
 				assert.equal(args[commandOffset(args) + 1], "create");
@@ -73,9 +80,9 @@ function harness(t, options = {}) {
 		writeFileSync(join(cwd, ".pi", "settings.json"), JSON.stringify(options.settings));
 		t.mock.method(process, "cwd", () => cwd);
 	}
-	(options.extension ?? cmuxStartExtension)(pi);
+	const ready = (options.extension ?? cmuxStartExtension)(pi);
 	return {
-		root, cwd, ctx, commands, tools, calls, notifications,
+		ready, root, cwd, ctx, commands, tools, calls, notifications,
 		invoke: (params = {}, signal) => tools.get("cmux_start_pi").execute("start-call", params, signal, undefined, ctx),
 		callsFor: (name) => calls.filter((call) => call.command === "cmux" && call.args[commandOffset(call.args)] === name),
 		launch() {
@@ -94,9 +101,10 @@ function harness(t, options = {}) {
 	};
 }
 
-test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not /cmc", (t) => {
+test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not /cmc", async (t) => {
 	const h = harness(t, { extension: piCmuxExtension });
-	assert.deepEqual([...h.tools.keys()].sort(), ["bash", "cmux_annotate_browser", "cmux_message_inbox", "cmux_message_send", "cmux_open_browser", "cmux_open_terminal", "cmux_start_pi", "edit", "read", "ssh_alias_save", "ssh_connect", "ssh_discover", "write"]);
+	await h.ready;
+	assert.deepEqual([...h.tools.keys()].sort(), ["cmux_annotate_browser", "cmux_message_inbox", "cmux_message_send", "cmux_open_browser", "cmux_open_terminal", "cmux_start_pi", "ssh_alias_save", "ssh_bash", "ssh_connect", "ssh_discover", "ssh_edit", "ssh_read", "ssh_write"]);
 	assert.ok(h.commands.has("cmmsg"));
 	assert.ok(h.commands.has("cmb"));
 	assert.ok(h.commands.has("cmba"));
@@ -109,7 +117,7 @@ test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not 
 		assert.equal(h.commands.has(name), false, `${name} is no longer bundled`);
 	}
 	const tool = h.tools.get("cmux_start_pi");
-	assert.equal(tool.parameters.properties.placement.default, "workspace");
+	assert.equal(tool.parameters.properties.placement.default, undefined, "placement depends on the task relationship");
 	assert.equal(tool.parameters.properties.continueSession.default, false);
 	assert.equal(tool.parameters.properties.cwd.type, "string");
 	assert.equal(tool.parameters.properties.cwd.minLength, 1);
@@ -117,19 +125,21 @@ test("bundle advertises browser, terminal, and Pi tools and registers /cmn, not 
 	assert.ok(tool.promptGuidelines.some((text) => text.includes("explicitly")));
 });
 
-test("users can register former review command names as configured shortcuts", (t) => {
+test("users can register former review command names as configured shortcuts", async (t) => {
 	const commands = Object.fromEntries(["cmrv", "cmrh", "review-v", "review-h"].map((name) => [name, "echo own-review"]));
 	const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands } } });
+	await h.ready;
 	for (const name of Object.keys(commands)) {
 		assert.match(h.commands.get(name).description, /echo own-review/);
 	}
 });
 
 for (const [name, description] of [["cmn", /fresh Pi chat/], ["cmb", /Open a browser/], ["cmba", /Retry browser annotations/], ["cmbk", /Return to the originating Pi conversation/], ["cmmsg", /Messaging controls:.*status.*inbox/]]) {
-	test(`configured shortcuts cannot replace /${name}`, (t) => {
+	test(`configured shortcuts cannot replace /${name}`, async (t) => {
 		const warnings = [];
 		t.mock.method(console, "warn", (message) => warnings.push(message));
 		const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands: { [name]: "echo wrong" } } } });
+		await h.ready;
 		assert.match(h.commands.get(name).description, description);
 		assert.ok(warnings.some((warning) => warning.includes(`/${name}: command already exists`)));
 	});
@@ -142,9 +152,11 @@ test("configured /cmbk cannot replace return navigation when the shortcut is dis
 	const warnings = [];
 	t.mock.method(console, "warn", (message) => warnings.push(message));
 	const h = harness(t, { extension: piCmuxExtension, settings: { "pi-cmux": { commands: { cmbk: "echo wrong" } } } });
+	await h.ready;
 	await h.commands.get("cmbk").handler("", h.ctx);
 	assert.match(h.notifications.at(-1)[0], /no recorded origin/);
-	assert.equal(h.calls.length, 0, "return must not launch the configured shell command");
+	assert.equal(h.calls.length, 1, "only the bundle caller check may run");
+	assert.equal(h.callsFor("identify").length, 1);
 	assert.ok(warnings.some((warning) => warning.includes("/cmbk: command already exists")));
 });
 
@@ -176,11 +188,12 @@ test("/cmn reports creation failures", async (t) => {
 	assert.equal(h.callsFor("respawn-pane").length, 0);
 });
 
-test("/cmn normalizes and bounds the task-derived sidebar title", async (t) => {
+test("/cmn keeps a project workspace label and bounds the task-derived tab title", async (t) => {
 	const h = harness(t);
 	await h.commands.get("cmn").handler(`  Task\n   ${"long ".repeat(40)}  `, h.ctx);
 	const args = h.callsFor("workspace")[0].args;
-	const title = args[args.indexOf("--name") + 1];
+	assert.equal(args[args.indexOf("--name") + 1], "project's files");
+	const title = h.callsFor("rename-tab")[0].args.at(-1);
 	assert.match(title, /^Task long /);
 	assert.ok(title.length <= 48);
 	assert.ok(title.endsWith("..."));
@@ -194,6 +207,7 @@ for (const placement of [undefined, "workspace", "right", "down", "tab"]) {
 		const launch = h.launch();
 		assert.deepEqual(launch.args, ["--provider", "openai", "--model", "example", "--thinking", "high", "--", "--help"]);
 		assert.equal(result.details.continueSession, false);
+		assert.equal(result.details.title, "Auth review", "explicit names are not rewritten or suffixed with the project");
 		assert.equal(result.details.cwd, h.cwd);
 		assert.equal(launch.cwd, h.cwd);
 		assert.equal(result.details.placement, placement ?? "workspace");
@@ -217,12 +231,13 @@ for (const placement of ["workspace", "right", "down", "tab"]) {
 			assert.equal(h.launch().cwd, target);
 			assert.equal(result.details.cwd, target);
 			assert.match(result.content[0].text, /Working directory:/);
-			assert.match(result.details.title, /^Review this repo · other repo/);
+			assert.equal(result.details.title, "Review this repo");
 			assert.ok(h.calls.some((call) => call.command === "git" && call.options.cwd === target));
 			assert.equal(h.ctx.cwd, h.cwd, "source directory must not change");
 			if (placement === "workspace") {
 				const args = h.callsFor("workspace")[0].args;
 				assert.equal(args[args.indexOf("--cwd") + 1], target);
+				assert.match(args[args.indexOf("--name") + 1], /^other repo/);
 			}
 		});
 	}
@@ -246,10 +261,31 @@ for (const pathKind of ["missing", "file", "file-parent"]) {
 	});
 }
 
-test("tool can open an empty fresh chat", async (t) => {
+test("tool can open an empty fresh chat with a project-based name", async (t) => {
 	const h = harness(t);
-	await h.invoke();
+	const result = await h.invoke();
 	assert.deepEqual(h.launch().args, []);
+	assert.equal(result.details.title, "project's files");
+	const args = h.callsFor("workspace")[0].args;
+	assert.equal(args[args.indexOf("--name") + 1], "project's files");
+});
+
+test("handoffs reuse an available session name in a same-workspace tab", async (t) => {
+	const h = harness(t);
+	h.ctx.sessionManager.appendSessionInfo("Authentication task");
+	const result = await h.invoke({ continueSession: true, prompt: "Next: test refresh tokens" });
+	assert.equal(result.details.title, "Authentication task");
+	assert.equal(result.details.placement, "tab");
+	assert.equal(h.callsFor("workspace").length, 0);
+	assert.equal(h.callsFor("new-surface").length, 1);
+});
+
+test("handoff tab defaults survive an explicitly chosen chat role, while explicit placement wins", async (t) => {
+	const h = harness(t);
+	const implicit = await h.invoke({ continueSession: true, role: "chat", prompt: "Continue testing" });
+	assert.equal(implicit.details.placement, "tab");
+	const explicit = await h.invoke({ continueSession: true, role: "chat", placement: "workspace", prompt: "Continue testing" });
+	assert.equal(explicit.details.placement, "workspace");
 });
 
 for (const [params, pattern] of [
@@ -363,15 +399,18 @@ test("worktree handoff creates a branch and persists summary without copying dir
 	assert.match(text, /dirty.txt/);
 	assert.doesNotMatch(text, /History should not be copied/);
 	await assert.rejects(() => h.invoke({ continueSession: true, branch: "fix/login" }), /Branch already exists/);
-	assert.equal(h.callsFor("workspace").length, 1);
+	assert.equal(h.callsFor("workspace").length, 0);
+	assert.equal(h.callsFor("new-surface").length, 1);
 });
 
 test("legacy continuation commands keep their split placements", async (t) => {
 	const h = harness(t, { extension: cmuxContinueExtension });
+	h.ctx.sessionManager.appendSessionInfo("Authentication task");
 	for (const [name, direction] of [["cmcv", "right"], ["cmch", "down"]]) {
 		await h.commands.get(name).handler("Focus on tests", h.ctx);
 		const args = h.callsFor("new-split").at(-1).args;
 		assert.equal(args[commandOffset(args) + 1], direction);
+		assert.equal(h.callsFor("rename-tab").at(-1).args.at(-1), "Authentication task");
 	}
 	assert.equal(h.callsFor("workspace").length, 0);
 });

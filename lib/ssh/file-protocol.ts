@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { shellQuote, SSH_MAX_OUTPUT } from "./transport.ts";
 
-export type SshFileOperation = "read" | "write" | "mkdir" | "access" | "edit-access";
+export type SshFileOperation = "read" | "write" | "mkdir" | "access" | "edit-access" | "home";
 
 /** No response bytes, paths or shell diagnostics are included in this error. */
 export class SshFileProtocolError extends Error {
@@ -22,7 +22,7 @@ export interface SshFileCommand {
 }
 
 /**
- * FILE operations only, not interactive/user bash output. Requires bash, cat,
+ * File operations and the fixed remote-home query, not interactive/user bash output. Requires bash, cat,
  * mkdir, test and POSIX wc. No encoding utility, remote tempfile or replay.
  * Callers must still check transport authority, exit status and stderr policy.
  * An invalid mutation acknowledgement does not establish whether effects occurred.
@@ -50,6 +50,18 @@ export function createFileCommand(operation: SshFileOperation, absolutePath: str
 				`__pi_file_length=\${BASH_REMATCH[1]}`,
 				`printf '%s%s\\n' ${shellQuote(headerPrefix)} "$__pi_file_length" || exit $?`,
 				`cat -- ${path} || exit $?`,
+				`printf '%s' ${shellQuote(trailer)}`,
+			].join("\n");
+			break;
+		case "home":
+			// HOME comes from the remote account environment. Never interpolate it
+			// into executable text or expand a local home directory.
+			script = [
+				`LC_ALL=C`,
+				`__pi_home=\${HOME-}`,
+				`[[ "$__pi_home" = /* ]] || exit 1`,
+				`printf '%s%s\\n' ${shellQuote(headerPrefix)} "\${#__pi_home}" || exit $?`,
+				`printf '%s' "$__pi_home" || exit $?`,
 				`printf '%s' ${shellQuote(trailer)}`,
 			].join("\n");
 			break;
@@ -88,7 +100,7 @@ export function createFileCommand(operation: SshFileOperation, absolutePath: str
 			if (length > SSH_MAX_OUTPUT) return fail();
 			cursor++;
 		}
-		if (cursor === first || stdout[cursor] !== 10 || (operation !== "read" && length !== 0)) return fail();
+		if (cursor === first || stdout[cursor] !== 10 || (operation !== "read" && operation !== "home" && length !== 0)) return fail();
 		const payloadStart = cursor + 1;
 		const payloadEnd = payloadStart + length;
 		if (payloadEnd + trailerBytes.length !== stdout.length

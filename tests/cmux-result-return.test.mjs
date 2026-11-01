@@ -35,6 +35,12 @@ test('authorized fresh launch embeds exact return route and grants only that chi
  await h.messaging.worker.tick();assert.equal(h.messages.length,0,'launch is not readiness; unknown child binding cannot deliver');
  h.peers.set(peer.surfaceId,peer);await h.messaging.worker.tick();assert.equal(h.messages.length,1);assert.equal(h.messages[0].message.customType,FOLLOWUP_CONTEXT);assert.deepEqual(h.messages[0].delivery,{triggerTurn:true,deliverAs:'followUp'});assert.equal(h.queue.length,1);
 });
+test('automatic return alone selects same-task placement before launch',async t=>{
+ const h=await setup(t);
+ const first=await h.invoke({returnResults:true,prompt:'Review A'}),second=await h.invoke({returnResults:true,prompt:'Review B'});
+ assert.equal(first.details.placement,'right');assert.equal(second.details.placement,'tab');
+ assert.equal(first.details.orientation.taskId,h.runtime.state.taskId);assert.equal(second.details.children.length,2);
+});
 test('automatic return instructions stay compact without dropping routing or delivery limits',async t=>{
  const h=await setup(t),result=await h.invoke({returnResults:true,role:'review',prompt:'Review only; do not edit',focus:false});
  const command=effectiveCommand(h.calls.find(c=>c.args[0]==='respawn-pane').args.at(-1)),start=command.indexOf('\n\n[Host result return]\n');
@@ -46,7 +52,7 @@ test('automatic return instructions stay compact without dropping routing or del
 });
 test('findings from different launched peers coalesce without granting unrelated traffic authority',async t=>{
  let count=0;const h=await setup(t,{exec:async(_cmd,args)=>args.includes('create')?{code:0,killed:false,stdout:JSON.stringify({workspace_ref:'workspace:2',surface_ref:`surface:${++count+1}`,surface_id:randomUUID()})}:undefined});
- const a=await h.invoke({returnResults:true,prompt:'Review A',focus:false}),b=await h.invoke({returnResults:true,prompt:'Review B',focus:false});await h.messaging.worker.tick();
+ const a=await h.invoke({placement:'workspace',returnResults:true,prompt:'Review A',focus:false}),b=await h.invoke({placement:'workspace',returnResults:true,prompt:'Review B',focus:false});await h.messaging.worker.tick();
  const owner={surfaceId:h.location.surfaceId,sessionId:h.ctx.sessionManager.getSessionId(),conversationId:h.runtime.state.conversationId,taskId:h.runtime.state.taskId};
  for(const [i,result] of [a,b].entries()){
   const peer={...owner,surfaceId:result.details.created.surface_id,sessionId:randomUUID(),conversationId:result.details.orientation.conversationId};h.peers.set(peer.surfaceId,peer);const envelope=makeEnvelope(peer,owner,result.details.automaticReturn.requestId,'result',`Review ${i} findings`);h.queue.push({id:randomUUID(),thread_id:randomUUID(),sender_surface_id:peer.surfaceId,recipient_surface_id:owner.surfaceId,body:JSON.stringify(envelope),state:'queued',in_reply_to:null});
@@ -125,5 +131,5 @@ test('standalone start extension fails before creation when automatic returns ar
  const h=orientationHarness(t);await h.emit('session_start');cmuxStart(h.pi);await assert.rejects(h.tools.get('cmux_start_pi').execute('fixture',{returnResults:true,prompt:'Review'},undefined,undefined,h.ctx),/bundled messaging/);assert.equal(h.calls.some(c=>c.args.includes('create')),false);
 });
 test('missing child UUID after successful launch reports not-configured, never a safe-to-retry launch failure',async t=>{
- const h=await setup(t,{exec:async(_cmd,args)=>args.includes('create')?{code:0,killed:false,stdout:JSON.stringify({workspace_ref:'workspace:2',surface_ref:'surface:2'})}:undefined});const result=await h.invoke({returnResults:true,prompt:'Review',focus:false});assert.equal(result.details.automaticReturn.state,'not-configured');assert.match(result.details.automaticReturn.warning,/already launched.*Do not relaunch/);assert.equal(h.calls.filter(c=>c.args.includes('create')).length,1);assert.equal(h.messaging.snapshot().returnRequests,0);
+ const h=await setup(t,{exec:async(_cmd,args)=>args.includes('create')?{code:0,killed:false,stdout:JSON.stringify({workspace_ref:'workspace:2',surface_ref:'surface:2'})}:undefined});const result=await h.invoke({placement:'workspace',returnResults:true,prompt:'Review',focus:false});assert.equal(result.details.automaticReturn.state,'not-configured');assert.match(result.details.automaticReturn.warning,/already launched.*Do not relaunch/);assert.equal(h.calls.filter(c=>c.args.includes('create')).length,1);assert.equal(h.messaging.snapshot().returnRequests,0);
 });

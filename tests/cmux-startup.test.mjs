@@ -91,7 +91,7 @@ async function launchHarness(t, mode) {
 		return result;
 	};
 	cmuxStart(h.pi);
-	h.invoke = () => h.tools.get("cmux_start_pi").execute("startup-test", { prompt: "Private task contents", related: true }, undefined, undefined, h.ctx);
+	h.invoke = () => h.tools.get("cmux_start_pi").execute("startup-test", { placement: "workspace", prompt: "Private task contents", related: true }, undefined, undefined, h.ctx);
 	return h;
 }
 

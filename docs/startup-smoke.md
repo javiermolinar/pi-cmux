@@ -26,3 +26,9 @@ The bindings had distinct conversation and task IDs and role `chat`. The first p
 This verifies no-prompt startup through ordinary-local-workspace create + respawn and protected local-context tab creation, with the default minimal Pi PATH and compact orientation bootstrap. A binding is not task readiness, prompt processing or completion.
 
 It does not establish right/down split behavior, long-prompt size limits, live transport-failure handling, cancellation, handoffs, result delivery, persisted resume, SSH execution or other layouts. Those require separate scope and evidence. The recorded UUIDs and PIDs are historical evidence, not permission for later interaction or cleanup.
+
+## Task-aware placement follow-up
+
+After the task-aware placement change, the user authorized one read-only reviewer smoke. `cmux_start_pi` received `role: "review"`, a short review prompt and title `Placement smoke test`, with placement omitted. The tool reported a **right split** and **exact child Pi binding observed**. The parent remained open; no launch retry or cleanup was performed.
+
+This confirms one default related-reviewer launch, not the subsequent-agent tab policy, handoffs, down splits, arbitrary layouts, review completion or result delivery. Evidence is the launch tool's binding confirmation; no separate process/cwd inspection or environment-version check was performed for this follow-up.

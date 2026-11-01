@@ -5,7 +5,8 @@ import { test } from "node:test";
 import cmuxAutotitle from "../extensions/cmux-autotitle.ts";
 import { openPiSession } from "../extensions/cmux-pi.ts";
 import { renameOrientedTopic } from "../lib/orientation/runtime.ts";
-import { childBootstrap, decodeBootstrap, encodeBootstrap, marker, orientedTitle, rootOrientation } from "../lib/orientation/state.ts";
+import { registerSshTarget } from "../lib/ssh/runtime.ts";
+import { ORIENTATION_ENTRY, childBootstrap, decodeBootstrap, encodeBootstrap, marker, orientedTitle, rootOrientation } from "../lib/orientation/state.ts";
 import { orientationHarness, target } from "./helpers/orientation.mjs";
 
 const drain = async () => { for (let i = 0; i < 5; i++) await immediate(); };
@@ -63,6 +64,108 @@ test("formatting does not strip another conversation's legacy prefix or another 
 	const other = { ...identity, conversationId: "87654321-2222-4222-8222-222222222222" };
 	assert.equal(orientedTitle(identity, `${marker(other)} · X`), `${marker(other)} · X · main [abcd]`);
 	assert.equal(orientedTitle(identity, "X · main [def0]"), "X · main [def0] · main [abcd]");
+});
+
+for (const git of ["repository", "unavailable", "throws", "timeout"]) {
+	test(`direct sessions use the project fallback when git is ${git}`, async (t) => {
+		const h = orientationHarness(t, { exec: (command, _args, options) => {
+			if (command !== "git") return;
+			assert.equal(options.cwd, "/work/project/services/api");
+			assert.ok(options.timeout > 0);
+			if (git === "throws") throw new Error("git missing");
+			return { code: git === "unavailable" ? 1 : 0, killed: git === "timeout", stdout: "/work/project\n", stderr: "" };
+		} });
+		h.ctx.cwd = "/work/project/services/api";
+		await h.emit("session_start"); await drain();
+		const expected = git === "repository" ? "project" : "api";
+		assert.equal(h.runtime.state.topic, "Pi", "project fallback changes display, not persisted orientation metadata");
+		assert.equal(titles(h).at(-1), orientedTitle(h.runtime.state, expected));
+		assert.ok(h.calls.every(call => ["git", "cmux"].includes(call.command)), "no model request or new process launch");
+	});
+}
+
+test("remote project fallbacks never inspect the local repository", async (t) => {
+	const h = orientationHarness(t);
+	const ssh = registerSshTarget(h.pi);
+	await h.emit("session_start"); await drain();
+	const original = { ...h.runtime.state };
+	ssh.activate({ destination: "fixture", remoteCwd: "/remote/application" });
+	h.calls.length = 0;
+	await h.emit("session_tree"); await drain();
+	assert.deepEqual(h.runtime.state, original);
+	assert.equal(titles(h).at(-1), orientedTitle(original, "application"));
+	assert.ok(h.calls.every(call => call.command === "cmux"), "no local git lookup or remote connection for naming");
+});
+
+test("legacy Pi defaults upgrade on resume without replacing identity", async (t) => {
+	const h = orientationHarness(t);
+	h.ctx.cwd = "/work/project";
+	const legacy = rootOrientation(h.ctx.sessionManager.getSessionId());
+	h.ctx.sessionManager.appendCustomEntry(ORIENTATION_ENTRY, legacy);
+	for (const event of ["session_start", "session_tree", "session_start"]) {
+		await h.emit(event); await drain();
+		assert.deepEqual(h.runtime.state, legacy);
+		assert.equal(titles(h).at(-1), orientedTitle(legacy, "project"));
+	}
+});
+
+for (const name of ["Fix authentication", "Pi"]) {
+	test(`explicit session name ${name} wins over the project fallback`, async (t) => {
+		const h = orientationHarness(t);
+		h.ctx.cwd = "/work/project";
+		h.ctx.sessionManager.appendSessionInfo(name);
+		await h.emit("session_start"); await drain();
+		assert.equal(titles(h).at(-1), orientedTitle(h.runtime.state, name));
+		h.ctx.sessionManager.appendSessionInfo("");
+		await h.emit("session_info_changed", { name: "" }); await drain();
+		assert.equal(titles(h).at(-1), orientedTitle(h.runtime.state, "project"));
+	});
+}
+
+test("an available saved task title wins without enabling automatic naming", async (t) => {
+	const h = orientationHarness(t);
+	h.ctx.cwd = "/work/project";
+	h.ctx.sessionManager.appendCustomEntry("pi-cmux.autotitle", { title: "Fix authentication" });
+	await h.emit("session_start"); await drain();
+	assert.equal(titles(h).at(-1), orientedTitle(h.runtime.state, "Fix authentication"));
+});
+
+for (const task of [undefined, "Review authentication"]) {
+	test(`new workspace separates the project label from task ${task}`, async (t) => {
+		const h = orientationHarness(t);
+		t.mock.method(globalThis, "setTimeout", callback => { queueMicrotask(callback); return 0; });
+		h.ctx.cwd = "/work/project";
+		await h.emit("session_start"); await drain();
+		const result = await openPiSession(h.pi, h.ctx.cwd, { prompt: task, focus: false });
+		assert.equal(result.ok, true);
+		assert.equal(result.title, orientedTitle(result.orientation, task ?? "project"));
+		const creation = h.calls.find(call => call.args.includes("create"));
+		assert.equal(creation.args[creation.args.indexOf("--name") + 1], "project");
+		assert.equal(titles(h).at(-1), result.title);
+	});
+}
+
+test("explicit launch titles remain the workspace and tab topic", async (t) => {
+	const h = orientationHarness(t);
+	t.mock.method(globalThis, "setTimeout", callback => { queueMicrotask(callback); return 0; });
+	await h.emit("session_start"); await drain();
+	const result = await openPiSession(h.pi, h.root, { title: "Pinned name", prompt: "Another task", focus: false });
+	assert.equal(result.title, orientedTitle(result.orientation, "Pinned name"));
+	const creation = h.calls.find(call => call.args.includes("create"));
+	assert.equal(creation.args[creation.args.indexOf("--name") + 1], "Pinned name");
+});
+
+test("shutdown during project lookup cannot claim or rename a stale session", async (t) => {
+	let release;
+	const h = orientationHarness(t, { exec: command => command === "git"
+		? new Promise(resolve => { release = () => resolve({ code: 0, stdout: "/work/project", stderr: "" }); }) : undefined });
+	const starting = h.emit("session_start"); await drain();
+	assert.equal(typeof release, "function");
+	await h.emit("session_shutdown");
+	release(); await starting; await drain();
+	assert.equal(h.runtime.state, undefined);
+	assert.equal(h.store.read(h.location.surfaceId), undefined);
+	assert.deepEqual(titles(h), []);
 });
 
 test("manual legacy/new names stay readable across reload with autotitle disabled and origin stays visible", async (t) => {

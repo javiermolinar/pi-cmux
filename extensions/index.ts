@@ -14,8 +14,26 @@ import { initI18n } from "./i18n.ts";
 import registerOrientation from "../lib/orientation/runtime.ts";
 import registerMessaging from "./cmux-messages.ts";
 import registerCmuxSsh from "./cmux-ssh.ts";
+import { execCmux } from "./cmux-core.ts";
+import { uuid } from "../lib/orientation/state.ts";
 
-export default function piCmuxExtensionBundle(pi: ExtensionAPI) {
+async function hasCmuxCaller(pi: ExtensionAPI): Promise<boolean> {
+	const surfaceId = uuid(process.env.CMUX_SURFACE_ID);
+	if (!surfaceId) return false;
+	try {
+		// A reachable socket (or inherited environment) does not establish a caller.
+		const result = await execCmux(pi, ["--json", "--id-format", "both", "identify"]);
+		if (!result.ok) return false;
+		const caller = JSON.parse(result.stdout)?.caller;
+		return Boolean(uuid(caller?.window_id) && uuid(caller?.workspace_id)
+			&& uuid(caller?.pane_id) && uuid(caller?.surface_id) === surfaceId);
+	} catch {
+		return false;
+	}
+}
+
+export default async function piCmuxExtensionBundle(pi: ExtensionAPI) {
+	if (!await hasCmuxCaller(pi)) return;
 	initI18n(pi);
 	registerCmuxSsh(pi); // Consume one-shot target before orientation adds branch entries.
 	registerOrientation(pi);

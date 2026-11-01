@@ -4,6 +4,8 @@ import { isAbsolute } from "node:path";
 export const SSH_TARGET_ENTRY = "pi-cmux.ssh-target";
 export type SshBackend = "native-ssh" | "legacy-relay" | "tmux-mirror";
 export interface SshTarget { readonly destination: string; readonly remoteCwd: string }
+/** Normalized request intent only; `~` must resolve before creating a saved target. */
+export interface SshConnectRequest { readonly destination: string; readonly remoteCwd: string }
 export interface LocalContext { readonly sessionId: string; readonly localCwd: string }
 export interface WorkspaceAssociation { readonly workspaceId: string; readonly backend: SshBackend }
 /** Normalized evidence from a trusted adapter, not a raw cmux response or activation request. */
@@ -14,10 +16,10 @@ export interface WorkspaceObservation extends WorkspaceAssociation {
 	readonly connected: boolean;
 }
 export type SshSessionRecord = Readonly<LocalContext & { version: 1 } & (
-	{ kind: "target"; target: SshTarget; association?: WorkspaceAssociation } | { kind: "clear" }
+	{ kind: "target"; target: SshTarget; association?: WorkspaceAssociation } | { kind: "clear" } | { kind: "pending"; destination: string }
 )>;
 export type TargetRestore =
-	| Readonly<{ kind: "absent" | "clear" }>
+	| Readonly<{ kind: "absent" | "clear" | "pending" }>
 	| Readonly<{ kind: "target"; target: SshTarget; association?: WorkspaceAssociation }>
 	| Readonly<{ kind: "invalid"; reason: "invalid-saved-state" | "foreign-session" | "local-context-mismatch" }>;
 
@@ -68,6 +70,17 @@ export function parseSshTarget(value: unknown): SshTarget {
 		return Object.freeze({ destination: destination(field(v, "destination")), remoteCwd });
 	} catch { return invalid(); }
 }
+/** Action requests reject extras, unlike restoration parsers. Only omitted cwd defaults home. */
+export function parseSshConnectRequest(value: unknown): SshConnectRequest {
+	try {
+		const v = object(value);
+		if (Reflect.ownKeys(v).some(key => key !== "destination" && key !== "remoteCwd")) return invalid();
+		const supplied = field(v, "remoteCwd");
+		const remoteCwd = supplied === undefined ? "~" : supplied;
+		const parsed = parseSshTarget({ destination: field(v, "destination"), remoteCwd: remoteCwd === "~" ? "/" : remoteCwd });
+		return Object.freeze({ destination: parsed.destination, remoteCwd: remoteCwd === "~" ? "~" : parsed.remoteCwd });
+	} catch { return invalid(); }
+}
 export function parseLocalContext(value: unknown): LocalContext {
 	try {
 		const v = object(value), sessionId = text(field(v, "sessionId"), 128), localCwd = text(field(v, "localCwd"), 4096);
@@ -86,6 +99,7 @@ export function parseSshSessionRecord(value: unknown): SshSessionRecord {
 		const v = object(value), context = parseLocalContext(v);
 		if (field(v, "version") !== 1) return invalid();
 		if (field(v, "kind") === "clear") return Object.freeze({ version: 1, ...context, kind: "clear" });
+		if (field(v, "kind") === "pending") return Object.freeze({ version: 1, ...context, kind: "pending", destination: destination(field(v, "destination")) });
 		if (field(v, "kind") !== "target") return invalid();
 		const target = parseSshTarget(field(v, "target")), rawAssociation = field(v, "association");
 		return Object.freeze({ version: 1, ...context, kind: "target", target,
@@ -106,7 +120,7 @@ export function restoreSshTarget(context: LocalContext, entries: readonly unknow
 			const record = parseSshSessionRecord(field(v, "data"));
 			if (record.sessionId !== owner.sessionId) return Object.freeze({ kind: "invalid", reason: "foreign-session" });
 			if (record.localCwd !== owner.localCwd) return Object.freeze({ kind: "invalid", reason: "local-context-mismatch" });
-			if (record.kind === "clear") return Object.freeze({ kind: "clear" });
+			if (record.kind === "clear" || record.kind === "pending") return Object.freeze({ kind: record.kind });
 			return Object.freeze({ kind: "target", target: record.target, ...(record.association ? { association: record.association } : {}) });
 		}
 		return Object.freeze({ kind: "absent" });

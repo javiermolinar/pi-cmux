@@ -6,17 +6,18 @@ import { resolveHandoffTarget } from "./cmux-continue.ts";
 import { capturePiLaunch } from "../lib/ssh/launch.ts";
 import { launchNavigationHint } from "../lib/orientation/hints.ts";
 import { waitForPiStartup } from "../lib/orientation/startup.ts";
-import { currentConversation } from "../lib/orientation/runtime.ts";
+import { conversationChildren, currentConversation } from "../lib/orientation/runtime.ts";
 import { messagingFor } from "../lib/messaging/runtime.ts";
 import {
 	describePiPlacement,
 	openPiSession,
+	resolvePiPlacement,
 	PI_LAUNCH_PROPERTIES,
 	validatePiLaunchOptions,
 	type PiLaunchOptions,
 } from "./cmux-pi.ts";
 
-interface StartPiParams extends Omit<PiLaunchOptions, "sessionFile"> {
+interface StartPiParams extends Omit<PiLaunchOptions, "sessionFile" | "taskTitle"> {
 	cwd?: string;
 	continueSession?: boolean;
 	returnResults?: boolean;
@@ -101,11 +102,11 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 	pi.registerTool({
 		name: "cmux_start_pi",
 		label: "Start Pi in cmux",
-		description: "Start an independent Pi chat in a new cmux left-sidebar workspace (default), split, or tab. Start fresh in the current or a specified directory, or explicitly hand off the current task with conversation context, optionally in a new branch worktree. Independent by default; opt-in returnResults configures best-effort automatic follow-up findings for a user-delegated fresh task, not managed worker execution. The source session stays open.",
-		promptSnippet: "Start a user-requested Pi agent or hand off a task to a new agent in the cmux sidebar, with optional split/tab placement.",
+		description: "Start Pi with task-aware placement: independent tasks use new cmux workspaces; same-task agents/reviewers use a split or tab; handoffs use a tab. Explicit placement overrides defaults. Start fresh in the current or a specified directory, or explicitly hand off the current task with conversation context, optionally in a new branch worktree. Independent by default; opt-in returnResults configures best-effort automatic follow-up findings for a user-delegated fresh task, not managed worker execution. The source session stays open.",
+		promptSnippet: "Start a user-requested Pi agent or hand off a task, grouped by task in cmux workspaces, splits and tabs.",
 		promptGuidelines: [
 			"Use cmux_start_pi only when the user explicitly asks to start another Pi agent/session or hand off the current task. Do not create agents proactively.",
-			"Default to placement='workspace' for a new agent or sidebar conversation. Use 'right' or 'down' for an explicit split, and 'tab' for a tab within the current workspace.",
+			"Unless the user specifies placement, omit it and follow task-aware defaults: independent task → workspace; first active same-task agent/reviewer → right split; additional/background same-task agents and handoffs → tab. Use related/role to express the task relationship, not cwd. Explicit placement always wins. focus=false makes a same-task launch a background tab.",
 			"Sessions are fresh by default. Set continueSession=true only for an explicit handoff, continuation, or request to inherit this conversation.",
 			"When the user requests a fresh session in another repo or directory, pass its path through cwd. Relative paths resolve from the current session; ~/ is supported. Omit cwd for handoffs, which retain the source directory or use the new worktree.",
 			"Supply a short task-specific title for the sidebar. For reviews, pass the user's requested review tool or workflow in prompt; do not prescribe one.",
@@ -133,6 +134,11 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 			if (fromRef && !branch) throw new Error("fromRef requires branch");
 			if (params.cwd !== undefined && params.continueSession) throw new Error("cwd cannot be combined with continueSession=true");
 			if (params.continueSession && params.related === false) throw new Error("continueSession requires related=true");
+			const launchOptions: PiLaunchOptions = { ...params,
+				placement: params.placement ?? (params.continueSession ? "tab" : undefined),
+				related: params.continueSession || params.returnResults ? true : params.related,
+				role: params.role ?? (params.continueSession ? "continue" : undefined),
+			};
 			signal?.throwIfAborted();
 			const launch = capturePiLaunch(pi, ctx.cwd);
 			const sourceCwd = ctx.cwd, sourceSession = launch.ticket?.context.sessionId;
@@ -157,7 +163,7 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 				check();
 				// Refuse before resolveStartDirectory can stat any explicit path, or handoff preparation reads Git/sessions.
 				if (launch.ticket && (params.cwd !== undefined || params.continueSession || params.role === "continue" || branch || fromRef)) throw new Error("SSH launches support omitted cwd fresh same-project sessions only; handoffs/worktrees and explicit cwd are unsupported");
-				if (launch.ticket && (params.placement ?? "workspace") === "workspace") throw new Error("SSH Pi workspace creation is unsupported; request a tab or split");
+				if (launch.ticket && resolvePiPlacement(pi, launchOptions) === "workspace") throw new Error("SSH Pi workspace creation is unsupported; request a tab or split");
 				let cwd = await resolveStartDirectory(params.cwd, ctx.cwd);
 				check();
 				let sessionFile: string | undefined;
@@ -178,13 +184,9 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 				const ticket = messaging && await messaging.prepareReturn(ctx);
 				check();
 				if (ticket) prompt = `${prompt}\n\n[Host result return]\nOn completion, cmux_message_send: target ${ticket.owner.surfaceId}, requestId ${ticket.requestId}, kind result; text concise findings with report paths/limits. Questions only if blocked on this task; optional progress stays quiet. Expires in 30 min or on parent abort/session change. Do not wait for replies, auto-retry unknown sends, launch workers or expand scope. Queued is not processing confirmation.`;
-				const title = params.title?.trim() || (params.continueSession ? ctx.sessionManager.getSessionName() : undefined)
-					|| params.prompt?.trim() || (params.continueSession ? "Continue" : "Pi");
+				const taskTitle = (params.continueSession ? ctx.sessionManager.getSessionName() : undefined) || params.prompt?.trim() || "";
 				signal?.throwIfAborted();
-				const result = await openPiSession(pi, cwd, { ...params, sessionFile, prompt, title,
-					related: params.continueSession || params.returnResults ? true : params.related,
-					role: params.role ?? (params.continueSession ? "continue" : undefined),
-				}, "Pi", seed => {
+				const result = await openPiSession(pi, cwd, { ...launchOptions, sessionFile, prompt, taskTitle }, "Pi", seed => {
 					check();
 					if (!ticket) return;
 					if (!seed) throw new Error("Automatic results require live orientation before launch");
@@ -214,6 +216,7 @@ export default function cmuxStartExtension(pi: ExtensionAPI) {
 					content: [{ type: "text", text: `${outcome} Working directory: ${cwd}. The source session remains open.${automaticReturn ? `\nAutomatic return: ${JSON.stringify(automaticReturn)}. Findings use best-effort follow-up delivery, not steering.` : ""}${result.navigation ? `\n${launchNavigationHint(result.navigation)}` : ""}` }],
 					details: {
 						placement: result.placement, cwd, title: result.title, automaticReturn, startup,
+						children: ownsParent() ? conversationChildren(pi) : [],
 						continueSession: params.continueSession ?? false, sessionFile,
 						workspaceRef: result.workspaceRef, surfaceRef: result.surfaceRef,
 						source: result.source, created: result.created, orientation: result.orientation,

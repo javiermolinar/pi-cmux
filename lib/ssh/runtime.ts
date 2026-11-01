@@ -7,7 +7,7 @@ import {
 
 export type SshTargetState = "inactive" | "configured" | "ready" | "disconnected" | "disabled";
 export type SshTargetReason = "invalid-context" | "invalid-saved-state" | "foreign-session" | "local-context-mismatch"
-	| "invalid-target" | "persistence-error" | "validation-failed" | "association-mismatch" | "connection-lost";
+	| "invalid-target" | "persistence-error" | "validation-failed" | "association-mismatch" | "connection-lost" | "connection-pending";
 export interface SshTargetSnapshot {
 	readonly state: SshTargetState;
 	readonly enabled: boolean;
@@ -46,6 +46,10 @@ export class SshTargetRuntime {
 	#blocked = false;
 	#busy = false;
 	#generation = 0;
+	#lifecycle = 0;
+	/** Inspection only: observers must not capture dispatch tickets while a mutation is busy. */
+	get generation(): number { return this.#generation; }
+	get lifecycle(): number { return this.#lifecycle; }
 	#controller = new AbortController();
 	#validation: { ticket: ValidationTicket; generation: number; sessionId: string } | undefined;
 	#dispatch = new WeakMap<DispatchTicket, { generation: number; sessionId: string }>();
@@ -69,6 +73,7 @@ export class SshTargetRuntime {
 	/** Session start, reload and tree navigation all reconstruct from the supplied branch. */
 	startSession(context: unknown, entries: readonly unknown[]): void {
 		this.#change(() => {
+			this.#lifecycle++;
 			this.#revoke();
 			this.#context = undefined; this.#target = undefined; this.#association = undefined;
 			this.#blocked = false; this.#reason = undefined;
@@ -76,6 +81,7 @@ export class SshTargetRuntime {
 			catch { this.#fail("invalid-context", true); return; }
 			const restored = restoreSshTarget(this.#context, entries);
 			if (restored.kind === "invalid") { this.#fail(restored.reason, true); return; }
+			if (restored.kind === "pending") { this.#fail("connection-pending", true); return; }
 			if (restored.kind === "target") { this.#target = restored.target; this.#association = restored.association; }
 			this.#settle();
 		});
@@ -92,6 +98,19 @@ export class SshTargetRuntime {
 				this.#target = parsed; this.#association = pin;
 			} catch { this.#fail("invalid-target", true); throw new Error("Invalid SSH target selection"); }
 			this.#save("target");
+		});
+	}
+
+	/** Revoke old dispatch before resolving a current explicit connection request.
+	 * No unresolved/placeholder target is persisted, and tools cannot fall back locally. */
+	beginResolution(destination: string): AbortSignal {
+		return this.#change(() => {
+			if (!this.#enabled || !this.#context) throw new Error("SSH connection cannot be resolved");
+			this.#revoke(); this.#target = undefined; this.#association = undefined;
+			// Persist unresolved intent, not a placeholder target. A crash/reload
+			// must not silently restore local execution or an older selection.
+			this.#save("pending", destination);
+			return this.#controller.signal;
 		});
 	}
 
@@ -168,6 +187,7 @@ export class SshTargetRuntime {
 	}
 	shutdown(): void {
 		this.#change(() => {
+			this.#lifecycle++;
 			this.#revoke(); this.#context = undefined; this.#target = undefined; this.#association = undefined;
 			this.#reason = undefined; this.#blocked = false; this.#settle();
 		});
@@ -200,19 +220,20 @@ export class SshTargetRuntime {
 	#settle(): void {
 		this.#state = !this.#enabled ? "disabled" : this.#reason ? "disconnected" : this.#target ? "configured" : "inactive";
 	}
-	#save(kind: "target" | "clear"): void {
+	#save(kind: "target" | "clear" | "pending", destination?: string): void {
 		try {
 			if (!this.#context) throw new Error("Missing context");
 			const record = parseSshSessionRecord({ version: 1, ...this.#context, kind,
-				...(kind === "target" ? { target: this.#target, ...(this.#association ? { association: this.#association } : {}) } : {}) });
+				...(kind === "target" ? { target: this.#target, ...(this.#association ? { association: this.#association } : {}) }
+					: kind === "pending" ? { destination } : {}) });
 			const result = this.#persist(SSH_TARGET_ENTRY, record);
 			if (result && (typeof result === "object" || typeof result === "function") && "then" in result) {
 				// Consume an accidental async rejection, but never treat it as a save.
 				void Promise.resolve(result).catch(() => {});
 				throw new Error("Asynchronous persistence unsupported");
 			}
-			if (kind === "clear") { this.#target = undefined; this.#association = undefined; }
-			this.#blocked = false; this.#reason = undefined; this.#settle();
+			if (kind !== "target") { this.#target = undefined; this.#association = undefined; }
+			this.#blocked = false; this.#reason = kind === "pending" ? "connection-pending" : undefined; this.#settle();
 		} catch {
 			this.#revoke(); this.#fail("persistence-error", true);
 			throw new Error("SSH target metadata could not be persisted");

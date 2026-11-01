@@ -28,7 +28,7 @@ test("strict destinations reject SSH options, credentials, URI, port/path ambigu
 });
 
 test("remote cwd is absolute literal POSIX data, never tilde/local expansion", () => {
-	for (const remoteCwd of [undefined, null, 1, "", "relative", "~/project", "C:\\work", "/a\n", "/a\r", "/a\0", "/a\u007f", "/a\u009f", "/" + "x".repeat(4096)]) {
+	for (const remoteCwd of [undefined, null, 1, "", "relative", "~", "~/project", "C:\\work", "/a\n", "/a\r", "/a\0", "/a\u007f", "/a\u009f", "/" + "x".repeat(4096)]) {
 		assert.throws(() => parseSshTarget({ destination: "dev", remoteCwd }));
 	}
 	for (const remoteCwd of ["/", "//literal", "/~/$USER/a'b;*", "/" + "x".repeat(4095)]) {
@@ -63,6 +63,17 @@ test("runtime validation does not trust prototypes, accessors, arrays or error m
 	assert.throws(() => parseSshTarget(proxy), { message: "Invalid SSH target metadata" });
 	for (const value of [record({ version: 2 }), record({ kind: "ready" }), record({ target: undefined }), record({ association: null }), record({ association: { workspaceId: "surface:1", backend: "native-ssh" } }), record({ association: { ...association, backend: "cmux-tui" } })]) {
 		assert.throws(() => parseSshSessionRecord(value));
+	}
+});
+
+test("pending home resolution persists only destination intent and cannot restore an older target", () => {
+	const pending = { version: 1, ...context, kind: "pending", destination: "dev-alias" };
+	const parsed = parseSshSessionRecord({ ...pending, target, ready: true, remoteCwd: "~" });
+	assert.deepEqual(parsed, pending); assert.ok(Object.isFrozen(parsed));
+	assert.deepEqual(restoreSshTarget(context, [entry(record()), entry(pending)]), { kind: "pending" });
+	assert.deepEqual(restoreSshTarget(context, [entry({ ...pending, sessionId: "foreign" })]), { kind: "invalid", reason: "foreign-session" });
+	for (const destination of [undefined, "-unsafe", "user:secret@host"]) {
+		assert.throws(() => parseSshSessionRecord({ ...pending, destination }));
 	}
 });
 

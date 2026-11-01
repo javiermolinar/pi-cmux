@@ -119,16 +119,17 @@ export function shellEscape(value: string): string {
 	return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
-export function resolvePathExecutable(name: string): string {
-	for (const entry of process.env.PATH?.split(delimiter) ?? []) {
-		// Resolve relative/empty entries in the calling process, before the child cd.
-		const path = resolve(entry || ".", name);
+export function resolvePathExecutable(name: string, source = "Minimal Pi PATH"): string {
+	// Explicit paths and relative/empty PATH entries resolve before the child cd.
+	const candidates = name.includes("/") ? [resolve(name)]
+		: (process.env.PATH?.split(delimiter) ?? []).map((entry) => resolve(entry || ".", name));
+	for (const path of candidates) {
 		try {
 			accessSync(path, constants.X_OK);
 			if (statSync(path).isFile()) return path;
 		} catch { /* continue through missing, broken or non-executable candidates */ }
 	}
-	throw new Error(`Minimal Pi PATH requires executable ${name} on the caller PATH`);
+	throw new Error(`${source} requires executable ${name}${name.includes("/") ? "" : " on the caller PATH"}`);
 }
 
 function buildCommandPrefix(cwd: string, minimalPiPath?: string): string[] {
@@ -147,10 +148,15 @@ function buildCommandPrefix(cwd: string, minimalPiPath?: string): string[] {
 export function buildPiCommand(cwd: string, options?: PiCommandOptions): string {
 	const mode = process.env.PI_CMUX_PI_PATH_MODE?.trim().toLowerCase() || "minimal";
 	if (mode !== "full" && mode !== "minimal") throw new Error("PI_CMUX_PI_PATH_MODE must be full or minimal");
-	const executable = mode === "minimal" ? resolvePathExecutable("pi") : undefined;
-	const minimalPath = executable ? [...new Set([dirname(executable), dirname(resolvePathExecutable("node"))])].join(delimiter) : undefined;
+	const binary = process.env.PI_CMUX_BINARY?.trim();
+	const executable = binary ? resolvePathExecutable(binary, "PI_CMUX_BINARY")
+		: mode === "minimal" ? resolvePathExecutable("pi") : undefined;
+	const minimalPath = mode === "minimal" && executable
+		? [...new Set([dirname(executable), dirname(resolvePathExecutable("node"))])].join(delimiter) : undefined;
 	const prefix = buildCommandPrefix(cwd, minimalPath);
 	if (mode === "full") prefix.splice(prefix.length - 1, 0, "PI_CMUX_PI_PATH_MODE=full");
+	// cmux need not inherit caller exports. Keep the same wrapper in descendants.
+	if (binary && executable) prefix.splice(prefix.length - 1, 0, `PI_CMUX_BINARY=${shellEscape(executable)}`);
 	if (options?.orientationBootstrap) prefix.splice(prefix.length - 1, 0, `PI_CMUX_ORIENTATION=${shellEscape(options.orientationBootstrap)}`);
 	const commandParts = [...prefix, executable ? shellEscape(executable) : "pi"];
 	if (options?.sessionFile) {
@@ -190,7 +196,8 @@ export function formatTabTitle(value: string | undefined, fallback: string): str
 	return `${title.slice(0, MAX_TAB_TITLE_LENGTH - 3).trimEnd()}...`;
 }
 
-async function getTabTitleContext(pi: ExtensionAPI, cwd: string): Promise<string> {
+/** Repository basename, or directory basename when git is unavailable. */
+export async function getProjectName(pi: ExtensionAPI, cwd: string): Promise<string> {
 	try {
 		const result = await pi.exec("git", ["rev-parse", "--show-toplevel"], {
 			cwd,
@@ -214,7 +221,7 @@ export async function buildContextualTabTitle(
 	fallback: string,
 ): Promise<string> {
 	const title = normalizeTabTitle(value, fallback);
-	const context = normalizeTabTitle(await getTabTitleContext(pi, cwd), "");
+	const context = normalizeTabTitle(await getProjectName(pi, cwd), "");
 	return formatTabTitle(context ? `${title}${TAB_TITLE_SEPARATOR}${context}` : title, title);
 }
 
@@ -404,7 +411,7 @@ export async function openCommandInNewWorkspace(
 	pi: ExtensionAPI,
 	cwd: string,
 	command: string,
-	options: { title: string; focus?: boolean; checkLaunch?: () => void },
+	options: { title: string; workspaceTitle?: string; focus?: boolean; checkLaunch?: () => void },
 ): Promise<CommandOpenResult> {
 	const callerResult = await getCallerInfo(pi);
 	if (!callerResult.ok) return callerResult;
@@ -425,7 +432,7 @@ export async function openCommandInNewWorkspace(
 			// Keep refs for command targeting and UUIDs for exact return authorization.
 			"--json", "--id-format", "both", "workspace", "create",
 			"--window", windowRef, "--cwd", cwd,
-			"--name", formatTabTitle(options.title, "Pi"), "--focus", String(options.focus ?? true),
+			"--name", formatTabTitle(options.workspaceTitle ?? options.title, "Pi"), "--focus", String(options.focus ?? true),
 		]);
 	} catch (error) { return creationFailure(error instanceof Error ? error.message : String(error)); }
 	if (!result.ok) return creationFailure(result.error || "Failed to create cmux workspace");

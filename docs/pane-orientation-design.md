@@ -6,6 +6,14 @@ Version-1 `pi-cmux.orientation` entries store owning session ID, random task/con
 
 Fresh launches default to independent tasks. Related/review launches share a task without history; continuation shares the task with handoff context. Contradictory options fail before creation. Every tracked child records its immediate creator—not the task root—even when independent.
 
+## Best-effort child memory and placement
+
+Each orientation runtime keeps a bounded map of its latest 64 successfully dispatched children. Records contain task/conversation/role, immediate parent session/conversation, exact created surface UUID, placement and observed binding state; no prompts or topics. Missing orientation/UUID evidence is not guessed. The map is local to the creator, cleared on reset/stop, and never reconstructed by scanning sessions or cmux.
+
+Independent tasks default to workspaces. Related/review agents default to a right split until the creator remembers a same-task split, then tabs; background related agents and continuations default to tabs. Explicit placement overrides policy. Background tabs and explicitly separate workspaces do not consume the first collaborator split. Repository location does not determine task membership.
+
+Snapshots validate exact live bindings, pin the first observed child session, and label lost/replaced/invalid bindings unknown—not completed or stopped. Unknown remembered splits still favor tabs. Memory is advisory layout metadata only: no task readiness/completion, supervision, child termination, persistent/shared registry, automatic retry, or execution/messaging authority. Launch tool results expose direct children in `details.children`; existing child orientation metadata supplies the reverse parent link.
+
 ## Bootstrap
 
 Launch environment carries bounded validated base64url JSON, consumed/removed once before descendants can inherit it. New wire format:
@@ -35,6 +43,8 @@ Private local bindings under `<agent-dir>/pi-cmux/orientation/` hold surface/ses
 ## Titles and notes
 
 Titles reserve role/task tag within 48 characters: `Check login · review [ab12]`. Only topic is truncated. Detailed conversation markers stay in status/metadata; equal titles do not imply equal identities. No task-specific native border colors are implemented.
+
+Project names are the fallback for direct sessions and new Pi workspaces. Tabs prefer an available task title; explicit launch titles override workspace defaults and `/name` overrides tab fallbacks. Launch task labels are kept separate from appended handoff/return instructions. Existing workspaces are not renamed. Reload/resume upgrades legacy generic `Pi` topics for display without replacing their saved identities. This policy makes no model requests; optional model-generated naming remains separate.
 
 Manual/automatic names change topic, not identity. Child renames are serialized and lifecycle-cancelled. Protected creation starts the child in the create RPC and names it best-effort afterward; workspace/standalone legacy paths name before respawn. Startup naming is not a readiness guarantee.
 

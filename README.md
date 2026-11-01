@@ -21,7 +21,7 @@
 
 ## Install
 
-Requires **Pi 1.3.0+** and **Node.js 22.19.0+**, including the `pi` executable on your PATH.
+Requires **Pi 1.3.0+** and **Node.js 22.19.0+**, with `pi` on your PATH or a Pi-compatible wrapper selected via `PI_CMUX_BINARY`.
 
 ```sh
 pi install npm:pi-cmux
@@ -29,7 +29,9 @@ pi install npm:pi-cmux
 npx pi-cmux
 ```
 
-Run Pi inside cmux. For native notifications, session restore and prompt previews:
+Run Pi inside cmux. Outside a verified cmux terminal, the package stays disabled: no commands, tools, shortcuts or lifecycle hooks are registered. A reachable cmux socket alone does not enable it.
+
+For native notifications, session restore and prompt previews:
 
 ```sh
 cmux hooks pi install
@@ -53,17 +55,23 @@ Package notifications default to off to avoid duplicate alerts. Zoxide is needed
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` |
 | Peer messages | `/cmmsg inbox`, `/cmmsg status`, `/cmmsg on`, `/cmmsg off` |
 
-You can also ask Pi to open a tool, browser or another Pi session. Use `role: "review"` for a same-task reviewer without copied history; `continueSession: true` hands off context. Opt-in `returnResults: true` returns delegated findings as best-effort follow-ups, not permission for fixes. See [usage](docs/usage.md).
+New Pi workspaces default to the project name. Tabs use an available task name, otherwise the project name plus role/task tag. Explicit launch titles and `/name` take priority; this policy makes no extra model calls. See [naming](docs/usage.md#conversation-tab-titles).
+
+You can also ask Pi to open a tool, browser or another Pi session. Independent tasks default to new workspaces; the first active same-task agent/reviewer opens beside its creator, additional/background collaborators and handoffs use tabs. Explicit placement always wins. Best-effort in-memory child tracking avoids repeatedly splitting for the same creator; it is not a task supervisor or persistent registry. Use `role: "review"` for a same-task reviewer without copied history; `continueSession: true` hands off context. Opt-in `returnResults: true` returns delegated findings as best-effort follow-ups, not permission for fixes. See [usage](docs/usage.md).
 
 **Inspect cmux before retrying a failed open:** a surface may already exist. Creation is never retried automatically. `cmux_start_pi` checks for the exact child’s live Pi binding for up to 10 seconds and warns the parent if startup remains unconfirmed; a binding is not task readiness or completion.
 
 ## Experimental SSH
 
 ```text
+Connect to javi
+# Or choose a project:
 Connect to javi in /srv/project
 ```
 
-Pi and its credentials/session files stay local; core file/shell tools use the explicit remote target. Helpers default to that project; `/cmt --local k9s` or tool `target: "local"` stays on the Mac. Complete requests need no extra gate; missing details are asked one at a time. Alias saving is separate and requires an exact-preview confirmation.
+Pi and its credentials/session files stay local; `ssh_read`, `ssh_write`, `ssh_edit` and `ssh_bash` use the explicit remote target. Helpers default to that project; `/cmt --local k9s` or tool `target: "local"` stays on the Mac. Omitted cwd or `~` defaults to the remote account's home, resolved remotely and stored as an absolute path. Complete requests need no extra gate; unresolved hosts or invalid paths are clarified one at a time. Alias saving is separate and requires an exact-preview confirmation.
+
+SSH does not claim the local `read`, `write`, `edit` or `bash` names, so extensions such as `pi-tool-display` can retain them with SSH enabled. On connection, Pi selects only SSH counterparts of the previously selected local tools and blocks local file/shell counterparts, including nested calls. `/ssh-clear`, while idle, restores the prior available local membership. `pi-tool-display` does not automatically customize the new SSH tools. See [selection, guards and migration](docs/ssh.md#tool-selection-and-local-guards).
 
 Resume/child launches restore selection, not readiness. Remote-owned layouts, SSH handoffs/worktrees and new browser previews are unsupported. See [SSH setup, controls and limits](docs/ssh.md).
 
@@ -73,8 +81,9 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PI_CMUX_PI_PATH_MODE` | `minimal` | Prepend Pi/Node directories to child PATH; `full` preserves caller PATH |
-| `PI_CMUX_SSH` | `1` | `0` disables SSH integration without making saved remote intent local |
+| `PI_CMUX_BINARY` | `pi` | Pi-compatible executable name or path, e.g. `sumocode`; no arguments or shell commands |
+| `PI_CMUX_PI_PATH_MODE` | `minimal` | Prepend selected executable/Node directories to child PATH; `full` preserves caller PATH |
+| `PI_CMUX_SSH` | `1` | `0` disables SSH execution/connections; saved remote intent stays blocked until explicit clear |
 | `PI_CMUX_SSH_DISCOVERY` | `1` | `0` disables SSH suggestions |
 | `PI_CMUX_SSH_ALIAS_SAVE` | `1` | `0` disables alias saving |
 | `PI_CMUX_NOTIFY_LEVEL` | `disabled` | Opt in with `all`, `medium` or `low` |
@@ -103,4 +112,4 @@ Defaults to **false**. Project `.pi/settings.json` overrides agent-directory set
 
 Bundled Pi tabs/splits and helper terminals require verified local workspace metadata and exact creation UUIDs. Remote-owned or unverified placement is refused. New sidebar workspaces still use create + respawn; cmux's outer login shell may run profiles before the launch PATH takes effect. Standalone legacy Pi launch paths can do the same.
 
-Workspace/browser behavior was tested on cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher on **0.65.2**. The switcher revalidates exact surface UUIDs before focusing and leaves rows unlabeled when cmux reports no agent. The 0.3.0 [local startup smoke](docs/startup-smoke.md) passed for one no-prompt workspace and one tab on **0.65.2** with Pi **1.4.0**. Splits, other layouts, long prompts and live transport failures remain unverified. See [compatibility details](docs/usage.md#compatibility) and [SSH evidence](docs/ssh-native-validation.md).
+Workspace/browser behavior was tested on cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher on **0.65.2**. The switcher revalidates exact surface UUIDs before focusing and leaves rows unlabeled when cmux reports no agent. The 0.3.0 [local startup smoke](docs/startup-smoke.md) passed for one no-prompt workspace and one tab on **0.65.2** with Pi **1.4.0**. A task-aware reviewer smoke also confirmed omitted placement resolving to a right split with an exact child binding. Other split/layout cases, long prompts and live transport failures remain unverified. See [compatibility details](docs/usage.md#compatibility) and [current SSH isolation smoke evidence](docs/ssh-isolation-live-validation.md). Historical helper/child evidence remains [separate](docs/ssh-native-validation.md).

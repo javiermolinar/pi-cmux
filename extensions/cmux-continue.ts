@@ -411,7 +411,8 @@ async function openContinueSplit(
 	}
 
 	const { cwd, sessionFile, prompt } = handoffTarget.target;
-	return openPiSession(pi, cwd, { sessionFile, prompt, title: "Continue", placement: direction, related: true, role: "continue" });
+	const taskTitle = ctx.sessionManager.getSessionName() || request.note?.trim() || "";
+	return openPiSession(pi, cwd, { sessionFile, prompt, taskTitle, placement: direction, related: true, role: "continue" });
 }
 
 function registerContinueCommand(

@@ -2,17 +2,17 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { homedir } from "node:os";
 import { registerSshAdapter, type SshAdapterOptions } from "../lib/ssh/adapter.ts";
 import { registerSshAliasSave } from "../lib/ssh/alias-save.ts";
-import { registerSshConnect, decideSshConversation, SSH_CONNECT_GUIDANCE, type SshActionAuthority } from "../lib/ssh/connect.ts";
+import { registerSshConnect, decideSshConversation, SSH_CONNECT_GUIDANCE, type SshActionAuthority, type SshConnectRequest } from "../lib/ssh/connect.ts";
 import { discoverSshDestinations, type SshDiscoveryOptions } from "../lib/ssh/discovery.ts";
 import { registerSshLaunchBootstrap } from "../lib/ssh/launch.ts";
 import { execCmux } from "./cmux-core.ts";
-import { parseSshTarget, type SshTarget } from "../lib/ssh/target.ts";
+import { parseSshTarget } from "../lib/ssh/target.ts";
 import { t } from "./i18n.ts";
 
 interface Supplied { destination?: string; remoteCwd?: string }
 interface Grant {
 	text: string; sessionId: string; cwd: string; live: boolean;
-	fields?: Supplied; connect?: SshTarget; alias: boolean; discovery: boolean;
+	fields?: Supplied; connect?: SshConnectRequest; alias: boolean; discovery: boolean;
 	used: Set<string>; active: Set<string>; controller: AbortController;
 }
 /** Host-owned literal parsing, not a model classifier. Ambiguous phrasing supplies no guessed fields. */
@@ -25,17 +25,16 @@ function supplied(text: string, pending?: Supplied): Supplied | undefined {
 		if (!pending.destination) {
 			try { return { ...pending, destination: parseSshTarget({ destination: rest, remoteCwd: "/" }).destination }; } catch { return; }
 		}
-		if (!pending.remoteCwd) {
-			try { return { ...pending, remoteCwd: parseSshTarget({ destination: pending.destination, remoteCwd: unquote(rest!) }).remoteCwd }; } catch { return; }
-		}
-		return;
+		// A known destination is pending only when an explicitly supplied path
+		// was invalid. Keep that distinction: invalid is never default-home intent.
+		return { ...pending, remoteCwd: unquote(rest!) };
 	}
 	rest = rest!.replace(/\s+(?:and|y)\s+(?:save|guardar)\b.*$/i, "");
 	const parts = /^(?:(\S+)\s+)?(?:in|at|en)\s+(.+)$/i.exec(rest);
 	const result: Supplied = {};
 	const host = parts ? parts[1] : rest;
 	if (host) { try { result.destination = parseSshTarget({ destination: host, remoteCwd: "/" }).destination; } catch { /* Ask; do not guess. */ } }
-	if (parts) { try { result.remoteCwd = parseSshTarget({ destination: "placeholder", remoteCwd: unquote(parts[2]!) }).remoteCwd; } catch { /* Ask. */ } }
+	if (parts) result.remoteCwd = unquote(parts[2]!);
 	return result;
 }
 function unquote(value: string): string {
@@ -60,10 +59,11 @@ export default function registerCmuxSsh(pi: ExtensionAPI, options: SshIntegratio
 	const old = registered.get(pi); if (old) return old;
 	const env = options.env ?? process.env;
 	const enabled = env.PI_CMUX_SSH !== "0";
-	const adapter = registerSshAdapter(pi, options), runtime = adapter.runtime;
+	const adapter = registerSshAdapter(pi, { ...options, enabled }), runtime = adapter.runtime;
 	registered.set(pi, adapter);
-	runtime.setEnabled(enabled);
-	registerSshLaunchBootstrap(pi); // Must precede orientation's startup entries.
+	// Selection startup is inert in local mode. The child captures only AFTER
+	// bootstrap's strict fresh-branch check, before configured intent is saved.
+	registerSshLaunchBootstrap(pi, ctx => adapter.selection!.prepare(ctx), ctx => adapter.selection!.start(ctx)); // Before orientation entries.
 	let pending: Supplied | undefined, grant: Grant | undefined;
 	const reset = () => { grant?.controller.abort(); pending = undefined; grant = undefined; };
 	pi.on("session_start", reset); pi.on("session_tree", reset); pi.on("session_shutdown", reset);
@@ -100,7 +100,7 @@ export default function registerCmuxSsh(pi: ExtensionAPI, options: SshIntegratio
 		currentRequest(ctx, action, parameters) {
 			if (!live(ctx) || grant!.used.has(action)) return false;
 			if (action === "connect") {
-				const p = parameters as SshTarget;
+				const p = parameters as SshConnectRequest;
 				return !!grant!.connect && p.destination === grant!.connect.destination && p.remoteCwd === grant!.connect.remoteCwd;
 			}
 			const p = parameters as { alias?: string; hostname?: string; user?: string; port?: number };
