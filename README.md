@@ -12,8 +12,8 @@
 
 ## Capabilities
 
-- Start independent chats or related reviewers; return to their origin with `/cmbk`.
-- Jump to any cmux terminal or browser tab with `/cm`: one transient, type-to-filter list of live panes.
+- Start independent chats or related reviewers.
+- Jump to any cmux terminal or browser tab with `/cm`.
 - Run tools beside Pi, annotate browser pages and continue tasks in new worktrees.
 - Show progress, tokens and optional notifications in the sidebar.
 
@@ -28,8 +28,6 @@ pi install npm:pi-cmux
 # Or install/update with:
 npx pi-cmux
 ```
-
-Run Pi inside cmux, then use **`/cmdoctor`** for diagnostics and explicit panel setup. The diagnostic-only command is also reachable outside a verified cmux terminal; normal commands, tools, shortcuts and lifecycle workflows remain disabled there. A reachable socket alone does not enable them. Invoking doctor only reads diagnostics; it does not install, configure or open anything.
 
 For native notifications, session restore and prompt previews:
 
@@ -56,11 +54,10 @@ Package notifications default to off to avoid duplicate alerts. Zoxide is needed
 | Continue in worktree | `/cmcv -c <branch> [--from <ref>] [note]` |
 | Peer messages | `/cmmsg inbox`, `/cmmsg status`, `/cmmsg on`, `/cmmsg off` |
 
-New Pi workspaces default to the project name. Tabs use an available task name, otherwise the project name plus role/task tag. Explicit launch titles and `/name` take priority; this policy makes no extra model calls. See [naming](docs/usage.md#conversation-tab-titles).
+Tabs use an available task name, otherwise the project name plus role/task tag. Explicit launch titles and `/name` take priority; this policy makes no extra model calls. See [naming](docs/usage.md#conversation-tab-titles).
 
-You can also ask Pi to open a tool, browser or another Pi session. Independent tasks default to new workspaces; the first active same-task agent/reviewer opens beside its creator, additional/background collaborators and handoffs use tabs. Explicit placement always wins. Best-effort in-memory child tracking avoids repeatedly splitting for the same creator; it is not a task supervisor or persistent registry. Use `role: "review"` for a same-task reviewer without copied history; `continueSession: true` hands off context. Opt-in `returnResults: true` returns delegated findings as best-effort follow-ups, not permission for fixes. See [usage](docs/usage.md).
+You can also ask Pi to open a tool, browser or another Pi session. Independent tasks default to new workspaces; the first active same-task agent/reviewer opens beside its creator, additional/background collaborators and handoffs use tabs. 
 
-**Inspect cmux before retrying a failed open:** a surface may already exist. Creation is never retried automatically. `cmux_start_pi` checks for the exact child’s live Pi binding for up to 10 seconds and warns the parent if startup remains unconfirmed; a binding is not task readiness or completion.
 
 ## Experimental SSH
 
@@ -70,9 +67,7 @@ Connect to javi
 Connect to javi in /srv/project
 ```
 
-Pi and its credentials/session files stay local; `ssh_read`, `ssh_write`, `ssh_edit` and `ssh_bash` use the explicit remote target. Helpers default to that project; `/cmt --local k9s` or tool `target: "local"` stays on the Mac. Omitted cwd or `~` defaults to the remote account's home, resolved remotely and stored as an absolute path. Complete requests need no extra gate; unresolved hosts or invalid paths are clarified one at a time. Alias saving is separate and requires an exact-preview confirmation.
-
-SSH does not claim the local `read`, `write`, `edit` or `bash` names, so extensions such as `pi-tool-display` can retain them with SSH enabled. On connection, Pi selects only SSH counterparts of the previously selected local tools and blocks local file/shell counterparts, including nested calls. `/ssh-clear`, while idle, restores the prior available local membership. `pi-tool-display` does not automatically customize the new SSH tools. See [selection, guards and migration](docs/ssh.md#tool-selection-and-local-guards).
+Pi and its credentials/session files stay local; `ssh_read`, `ssh_write`, `ssh_edit` and `ssh_bash` use the explicit remote target.See [selection, guards and migration](docs/ssh.md#tool-selection-and-local-guards).
 
 Resume/child launches restore selection, not readiness. Remote-owned layouts, SSH handoffs/worktrees and new browser previews are unsupported. See [SSH setup, controls and limits](docs/ssh.md).
 
@@ -95,13 +90,9 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 
 [All settings and shortcuts](docs/usage.md#configuration) · [PATH behavior](docs/usage.md#pi-launch-path) · [Browser privacy](docs/usage.md#browser-annotations)
 
-## Sidebar prototype
+## Sidebar
 
-The packaged [agent state right panel](examples/sidebars/README.md) shows live state symbols/colors, foldable workspace groups, exact current-agent highlighting and surface actions only for workspaces with tracked agents (including idle/ended agents). It keeps only the most recently active session per exactly resolved live terminal, so `/new` does not leave duplicate rows or highlights; counts and filters use the same roster. An **Attention** toggle filters to needs-input or exact-surface unread agents. Right-click sessions to assign stable sidebar-only aliases until the panel reloads; automatic names use task titles/latest prompts rather than repeating Pi. The panel has no workspace creation button. It preserves the stock left sidebar. A live startup/cross-workspace RPC smoke and native highlight screenshot passed on cmux 0.65.2; native mouse targets, other layouts and cross-tab/multi-window focus remain unverified.
-
-Use `/cmdoctor`: its Powerline-inspired native Pi overlay uses the active theme, shows selected-check details and remediation, and offers **Refresh (read-only)**, separately confirmed **Install/update panel**, and explicit **Show Pi Agents (no focus)** / **Hide right sidebar** buttons. **Tab/Shift-Tab** changes focus, **arrows** navigate, **Enter** activates actions, **PgUp/PgDn** scroll details and **Esc** closes. It stays open until dismissed; narrow terminals stack details and checks, and below **42 columns × 18 rows** actions are disabled. Non-interactive or unavailable custom UI falls back to plain text without a model turn.
-
-The npm package includes the canonical asset and shared Node-only installer helper: no checkout, pinned launch bridge or development dependencies are required. Updates warn about legacy/modified files, require exact raw-byte SHA-256 confirmation and preserve backups and existing file modes; doctor refuses symlink targets/ancestors. Capability errors remain visible; advertised methods do not prove permissions, and custom-sidebar beta availability remains explicitly unverified. See [setup and recovery](docs/usage.md#doctor-and-panel-setup) and [validation evidence/limits](docs/doctor-validation.md).
+The packaged [agent state right panel](examples/sidebars/README.md) shows live state symbols/colors, foldable workspace groups, exact current-agent highlighting and surface actions only for workspaces with tracked agents (including idle/ended agents). 
 
 ### Auto-open (opt-in)
 
@@ -110,11 +101,3 @@ After separately installing the panel, manually add this to Pi's `settings.json`
 ```json
 { "pi-cmux": { "panel": { "autoOpen": true } } }
 ```
-
-Defaults to **false**. Project `.pi/settings.json` overrides agent-directory settings, including `false` to opt out. With `true`, startup or explicit `/reload` makes one best-effort, non-focusing open in the verified local caller's window, only if `~/.config/cmux/sidebars/agent-state-panel.js` is an installed regular file. No automatic installation or beta enablement. Headless, remote-owned or unverified contexts are skipped. `/new`, `/resume`, `/fork` and agent activity never reopen it; failures are not retried. Disabling this option does not hide a panel cmux already remembers as open.
-
-## Compatibility
-
-Bundled Pi tabs/splits and helper terminals require verified local workspace metadata and exact creation UUIDs. Remote-owned or unverified placement is refused. New sidebar workspaces still use create + respawn; cmux's outer login shell may run profiles before the launch PATH takes effect. Standalone legacy Pi launch paths can do the same.
-
-Workspace/browser behavior was tested on cmux **0.64.25**; orientation, ordinary-local-workspace SSH helper/child tabs and the `/cm` switcher on **0.65.2**. The switcher revalidates exact surface UUIDs before focusing and leaves rows unlabeled when cmux reports no agent. The 0.3.0 [local startup smoke](docs/startup-smoke.md) passed for one no-prompt workspace and one tab on **0.65.2** with Pi **1.4.0**. A task-aware reviewer smoke also confirmed omitted placement resolving to a right split with an exact child binding. Other split/layout cases, long prompts and live transport failures remain unverified. See [compatibility details](docs/usage.md#compatibility) and [current SSH isolation smoke evidence](docs/ssh-isolation-live-validation.md). Historical helper/child evidence remains [separate](docs/ssh-native-validation.md).
