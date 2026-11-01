@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-01
+
 ### Added
 
 - `/cmdoctor`: diagnostic-only setup command available outside verified cmux while normal workflows remain guarded. Read-only capability discovery, exact caller/locality, panel and settings inspection; visible query failures/missing required methods, remediation and explicitly unverified beta availability. Advertisements do not prove permissions.
