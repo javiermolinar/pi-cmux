@@ -32,7 +32,7 @@ for (const [name, surface, response] of [
 	["cmux failure", SURFACE, { code: 1, killed: false, stdout: "", stderr: "no socket" }],
 	["cmux timeout", SURFACE, { code: 0, killed: true, stdout: JSON.stringify({ caller }), stderr: "" }],
 ]) {
-	test(`bundle stays completely disabled: ${name}`, async (t) => {
+	test(`bundle exposes only diagnostic command: ${name}`, async (t) => {
 		environment(t, {
 			CMUX_SURFACE_ID: surface, CMUX_PANEL_ID: undefined,
 			CMUX_SOCKET_PATH: "/tmp/reachable-cmux.sock", CMUX_WORKSPACE_ID: OTHER,
@@ -40,10 +40,15 @@ for (const [name, surface, response] of [
 		});
 		t.mock.method(console, "warn", () => assert.fail("disabled bundle must not warn"));
 		t.mock.method(console, "error", () => assert.fail("disabled bundle must not log errors"));
-		const calls = [];
+		const calls = [], commands = [];
 		const pi = new Proxy({}, {
 			get(_target, key) {
-				assert.equal(key, "exec", `disabled bundle must not access pi.${String(key)}`);
+				if (key === "registerCommand") return (name, spec) => {
+					assert.equal(name, "cmdoctor", "only read-only setup diagnostics bypass the caller guard");
+					assert.equal(typeof spec.handler, "function");
+					commands.push(name);
+				};
+				assert.equal(key, "exec", `disabled workflows must not access pi.${String(key)}`);
 				return async (...args) => {
 					calls.push(args);
 					if (response instanceof Error) throw response;
@@ -53,6 +58,7 @@ for (const [name, surface, response] of [
 			},
 		});
 		await piCmuxExtension(pi);
+		assert.deepEqual(commands, ["cmdoctor"]);
 		assert.equal(calls.length, surface === SURFACE ? 1 : 0);
 		if (calls.length) {
 			assert.deepEqual(calls[0], ["cmux", ["--json", "--id-format", "both", "identify"], { timeout: 5000 }]);

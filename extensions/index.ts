@@ -8,6 +8,7 @@ import cmuxOpenExtension from "./cmux-open.ts";
 import cmuxBrowserExtension from "./cmux-browser.ts";
 import cmuxSidebarExtension from "./cmux-sidebar.ts";
 import cmuxPanelExtension from "./cmux-panel.ts";
+import cmuxDoctorExtension from "./cmux-doctor.ts";
 import cmuxAutotitleExtension from "./cmux-autotitle.ts";
 import cmuxSwitcherExtension from "./cmux-switcher.ts";
 import { initI18n } from "./i18n.ts";
@@ -33,6 +34,8 @@ async function hasCmuxCaller(pi: ExtensionAPI): Promise<boolean> {
 }
 
 export default async function piCmuxExtensionBundle(pi: ExtensionAPI) {
+	// Diagnostic-only exception: no ordinary tools/events outside a verified caller.
+	cmuxDoctorExtension(pi);
 	if (!await hasCmuxCaller(pi)) return;
 	initI18n(pi);
 	registerCmuxSsh(pi); // Consume one-shot target before orientation adds branch entries.

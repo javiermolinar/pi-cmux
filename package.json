@@ -35,6 +35,7 @@
   "files": [
     "extensions/",
     "lib/",
+    "examples/sidebars/agent-state-panel.js",
     "docs/",
     "install.mjs",
     "README.md",

@@ -100,6 +100,18 @@ test("installer renders pinned launch config, refuses implicit replacement, back
   assert.equal(readFileSync(target, "utf8"), "updated");
 });
 
+test("installer preserves colliding temporary file and original panel on exclusive creation failure", t => {
+  const h = fixture(t), target = join(h.root, "sidebars", "agent-state-panel.js");
+  const original = "original installed panel", collision = "pre-existing temporary content";
+  installSidebar(target, original);
+  const temporary = target + ".tmp-" + process.pid;
+  writeFileSync(temporary, collision, { flag: "wx" });
+
+  assert.throws(() => installSidebar(target, "updated panel", sha256(original)), { code: "EEXIST" });
+  assert.equal(readFileSync(target, "utf8"), original);
+  assert.equal(readFileSync(temporary, "utf8"), collision);
+});
+
 async function runFakeBootstrap(t, binds) {
   const h = fixture(t), bin = join(h.root, "bin's tools"); mkdirSync(bin);
   const capture = join(h.root, "capture.json"), callsPath = join(h.root, "calls.jsonl");

@@ -1,6 +1,6 @@
 # Agent state panel (prototype)
 
-[`agent-state-panel.js`](agent-state-panel.js) is a reactive **cmux right panel**. It keeps the stock left sidebar available. This is a repository-only experiment, not an npm-installed feature or a Pi extension.
+[`agent-state-panel.js`](agent-state-panel.js) is a reactive **cmux right panel**. It keeps the stock left sidebar available. This prototype asset ships in the npm package alongside the shared Node-only installer helper. Use **`/cmdoctor`** in Pi for diagnostics and explicit setup; no worktree or pinned launch configuration is required. The panel itself is a cmux custom sidebar, not a Pi extension.
 
 The roster shows workspace rollups, agent states, scope/search, unread notifications and optional git/PR/progress details. Agent rows use a sidebar alias when set, otherwise the task title, tab's latest prompt or **Untitled session**. Redundant **Pi** labels are omitted from the secondary line; other agent names and unread/subagent/navigation details remain. State labels appear on agent rows; there is no footer legend. Use each workspace's chevron to fold its agent list; the title/metadata still select the workspace. Fold choices stay local to the panel until it reloads, preserve rollup counts and never reorder or navigate. Search temporarily expands matching groups; clear it to restore folds. The current agent surface gets a blue wash and semibold title only when its workspace is selected and its exact live tab is focused. Workspaces without tracked agents are hidden in both scopes, even if their title matches search or they have lane/unread evidence. Only the most recently active session per exactly resolved live terminal is shown, using cmux's most-recent-first session order (also the tie-breaker). Older sessions on that terminal are excluded before search, Attention filtering, state sorting and display caps. Distinct terminals and agents without an exact live binding remain separate. Idle, ended and unknown agents remain visible unless superseded on the same terminal. The panel has no workspace creation button; **+ New Pi** has been removed.
 
@@ -48,11 +48,11 @@ These checks use the latest sidebar snapshot (~1-second refresh), not an atomic 
 
 ## Retained launch experiment (not exposed in the panel)
 
-The launch form helpers and bootstrap remain for repository experiments and fixture coverage, but the installed panel has no control that opens the form. The following describes those internal helpers, not an available panel workflow.
+The launch form helpers and bootstrap remain **tests-only historical experiment code**, not a supported setup or launch workflow. The production installer does not pin executable/bridge paths; the installed panel has no control that opens the form. The following describes the historical fixture configuration only, not current installation.
 
 The custom-sidebar sandbox cannot directly call a Pi extension. Its `cmux()` action pipe also does not return RPC results. Instead:
 
-1. The explicit installer pins absolute Node, Pi, cmux and [`launch-pi.mjs`](launch-pi.mjs) paths in the installed JS. No credentials or conversation data are embedded. A raw copied panel remains a read-only roster; it cannot guess a launch command from cmux's app PATH.
+1. The historical launch fixture pinned absolute Node, Pi, cmux and [`launch-pi.mjs`](launch-pi.mjs) paths in its experimental JS. No credentials or conversation data are embedded. A raw copied panel remains a read-only roster; it cannot guess a launch command from cmux's app PATH.
 2. The internal form helper displays the selected ordinary-local workspace's directory. You can edit it to another absolute local directory or `~/path`; there is no hidden cwd fallback. **Create** is a second explicit action.
 3. One native `workspace.create` action, routed using the source workspace ID, starts the fixed bootstrap as `initial_command` in a **new** workspace. Literal shell arguments protect paths/JSON, including quotes and shell metacharacters. There is no terminal-input injection or intermediate helper tab.
 4. The bootstrap checks the directory exists, validates its exact cmux terminal identity, and reuses pi-cmux's `assertLocalWorkspace` checks for both source/new workspaces. Remote-owned, missing or ambiguous locality is refused before Pi starts.
@@ -65,9 +65,15 @@ Limitations: cmux creation errors cannot be returned to the form; invalid/missin
 
 ## Opt-in installation / preview
 
-Requires Node 22.19+, Pi on PATH and cmux 0.65.2 with **Settings → Custom Sidebars** beta enabled. Install development dependencies with `npm ci --ignore-scripts` if needed to resolve this checkout's Pi peer package.
+Requires Node **22.19.0+**, Pi **1.3.0+** and compatible cmux custom-sidebar support (native read-only discovery observed on **0.65.2**). Check **Settings → Custom Sidebars** manually: doctor cannot verify or enable the beta.
 
-Run from this worktree only after approving the write to `~/.config/cmux/sidebars`:
+Install `pi install npm:pi-cmux`, then invoke **`/cmdoctor`**. Read-only diagnostics are available even outside verified cmux, while all normal workflows stay guarded. The active-theme, Powerline-inspired native Pi overlay has selected-error details/remediation, responsive side-by-side/stacked layouts, **Tab/Shift-Tab** focus, **arrows** navigation, **Enter** actions, **PgUp/PgDn** details and **Esc** close. There is no automatic dismissal. Below **42 columns × 18 rows** actions are disabled. Non-interactive/unavailable UI uses plain text without a model turn.
+
+Choose **Refresh (read-only)** to recollect; **Install/update panel** for a separate confirmation; **Show Pi Agents (no focus)** for a separate single exact verified-local-window request, or **Hide right sidebar** to hide that window’s entire right sidebar. Both actions revalidate the original local caller; neither edits settings or retries. cmux 0.65.2 excludes custom panels from its mode-tab bar, so Show selects Pi Agents directly without adding a native Custom tab. Invocation never installs, opens, edits settings, enables beta, performs network setup or changes startup behavior. Capability query failures/missing required methods are errors, not healthy results; advertised methods do not establish permissions. See [diagnostics and remediation](../../docs/usage.md#diagnostics-and-remediation).
+
+The npm payload includes `agent-state-panel.js` and `lib/panel-install.mjs`; the helper works from an extracted package with Node built-ins only. It renders a managed checksum header over the canonical asset, without pinned launch paths or worktree imports. Doctor warns on legacy/modified copies, confirms the exact raw-byte full-file SHA-256 and existing permission mode before replacement, preserves that mode in the replacement and backup, rejects symlink leaves/ancestors and stale content/paths, and preserves the old content in an exclusive `.backup-<timestamp>` file. Cancellation changes nothing. Keep/compare backups before manually restoring a desired copy; Refresh after recovery. Installation does not open or natively validate the panel.
+
+Optional contributor route: the repository-only CLI below reuses shared installation logic but is **not shipped in npm**. It is not required for production setup:
 
 ```sh
 node examples/sidebars/install-agent-state-panel.mjs
@@ -85,11 +91,11 @@ node examples/sidebars/install-agent-state-panel.mjs --replace <the-observed-sha
 cmux sidebar validate agent-state-panel
 ```
 
-**Keep this worktree at its current path:** the installed copy points to its launch bridge and imports shared code from this checkout. Moving/removing it requires reinstalling. Edits to the worktree's JS do not update the installed copy automatically; explicitly reinstall it. The installed JS hot-reloads when replaced. This prototype has no `/cmpanel` command or npm distribution yet.
+There is no worktree keep-path requirement for the production panel. Source/asset files remain unchanged during installation; edits to a checkout do not update an installed copy automatically. Explicitly install/update again. The installed JS hot-reloads when replaced. `/cmdoctor` is the production setup command; there is no `/cmpanel` command.
 
 To opt into opening this already-installed panel when pi-cmux starts, set `"pi-cmux": { "panel": { "autoOpen": true } }` in Pi's agent-directory or project `settings.json` (default **false**). A project `false` overrides global `true`; malformed/invalid settings fail closed. Startup or explicit `/reload` attempts one non-focusing open in the verified ordinary-local caller workspace's window. It skips headless, missing/non-file panels and unverified/remote-owned contexts, does not install/enable anything, and never retries or reopens on `/new`, `/resume`, `/fork` or agent updates. Disabling the setting does not hide a panel cmux already remembers as open.
 
-The right-panel command keeps terminal focus and does not select a custom left sidebar. Add `--workspace <full-workspace-id>` to target another window. To stop previewing, use `cmux right-sidebar hide` or restore the right-panel mode you used before. Remove only the prototype copy/backups you installed if you no longer want them.
+The right-panel command keeps terminal focus and does not select a custom left sidebar. Doctor targets only the exact originally verified caller's window; it does not guess or offer arbitrary-window placement. To stop previewing, use `cmux right-sidebar hide` or restore the right-panel mode you used before. Remove only the prototype copy/backups you installed if you no longer want them.
 
 ### Live acceptance checks
 
@@ -99,7 +105,7 @@ The right-panel command keeps terminal focus and does not select a custom left s
 - Compare working/input/ended/idle/unread states against cmux metadata. Workspaces without tracked agents should stay hidden; add/remove the last tracked agent and check the workspace appears/disappears. Unknown agents must not show as idle.
 - Click agents across workspaces/tabs; verify exact focus and current-agent highlight. Fold/unfold groups, search through a folded group, clear search and check the fold returns. Search, switch scope, end/move/close sessions and check reactive updates.
 
-The panel was installed and enabled at the user's request; previous copies were backed up. Native cmux validation passed (1 valid, 0 invalid).
+**Historical prototype evidence only:** an earlier panel was installed/enabled at the user's request, with previous copies backed up; native cmux validation reported 1 valid, 0 invalid. The doctor-validation native checks did **not** install the latest production panel or actually open it in live Pi. See [current evidence and limits](../../docs/doctor-validation.md).
 
 **Live smoke, 2026-11-01 (before removing the New Pi button):** the installed JS ran in cmux's bundled scene runtime with native cmux RPC dispatch. Cancel created nothing; Create dispatched once and opened one real Pi workspace in this worktree. Its exact surface published a live binding with fresh task/conversation IDs, `main` role and no inherited origin/resume flags. The child was empty (0 tokens), its process cwd matched this worktree and its temporary startup status cleared. Agent-row events navigated origin → child → origin; native identity queries confirmed exact workspace/surface IDs and restored the caller. Fold/unfold events changed only the scene; current-agent state followed the selected workspace/tab.
 
@@ -119,11 +125,11 @@ npm run pack:check
 
 Tests cover latest-session-per-terminal deduplication across resets, counts/rollups, attention/search/caps, stale navigation/naming callbacks and reactive single-row highlighting; default-off opt-in startup, project overrides, headless/missing-panel/locality refusal, cancellation and no replay after close/failure, stable workspace-qualified aliases, search/reset/cancel/input limits and stale naming targets, reactive Attention filtering with scope/search/counts and exact unread ownership, task/prompt/fallback names, redundant Pi-label removal and retained non-Pi/details metadata, state precedence, unknowns, empty-workspace exclusion across scopes/search/caps and last-agent transitions, local folding/search reveal, exact focused-agent highlighting, search/counts/caps, native panel-to-surface mapping and exact/stale/ambiguous targets, creation/cancel/single-shot behavior, literal shell argv, local identity/refusal checks, independent child environment, exact startup evidence and installer replacement/backup protection. A subprocess integration test runs the real bridge against **fake** Pi/cmux executables; it confirms startup binding and early-exit warning paths without touching the actual socket or starting an agent.
 
-When the installed macOS `SidebarRuntime.js` exists, seven scene tests use that **real bundled JS runtime** in a Node VM to check reactive rows, context-menu naming/editor events, UI events, the absence of the New Pi button, retained internal form helpers and bounded scene size. Otherwise they skip; `CMUX_SIDEBAR_RUNTIME=/path/to/SidebarRuntime.js` enables them. A separate local Swift/JavaScriptCore fixture check also passed. These checks do not establish native SwiftUI layout or live workspace creation/focus behavior.
+When the installed macOS `SidebarRuntime.js` exists, scene tests use that **real bundled JS runtime** in a Node VM to check reactive rows, context-menu naming/editor events, UI events, the absence of the New Pi button, retained internal form helpers and bounded scene size. Otherwise they skip; `CMUX_SIDEBAR_RUNTIME=/path/to/SidebarRuntime.js` enables them. A separate local Swift/JavaScriptCore fixture check also passed. These checks do not establish native SwiftUI layout or live workspace creation/focus behavior.
 
-Current local results: **1,379 passed, 14 skipped, 0 failed** in the full suite; all **103** focused panel/bootstrap/startup tests passed. Typecheck, package dry-run, JavaScriptCore fixture execution and `git diff --check` passed. The panel, installer and bridge remain excluded from the npm payload.
+Those earlier prototype results are not a current doctor-validation gate result. The npm payload now includes the canonical panel asset and shared helper; the repository CLI and historical launch bridge are not shipped. Current supplied evidence and outstanding checks are recorded in [doctor validation](../../docs/doctor-validation.md).
 
-After integrating current main's pinned Pi 1.4.0 development dependency, npm audit reports three advisories (moderate in `@earendil-works/pi-coding-agent` and `minimatch`, high in transitive `undici`). Package versions/lockfile otherwise match main; no dependency fixes were made.
+Historical prototype dependency note (not rerun for doctor validation): after integrating that main revision's pinned Pi 1.4.0 development dependency, npm audit reported three advisories (moderate in `@earendil-works/pi-coding-agent` and `minimatch`, high in transitive `undici`). Package versions/lockfile otherwise match main; no dependency fixes were made.
 
 ## API evidence
 

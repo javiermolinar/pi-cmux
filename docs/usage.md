@@ -6,6 +6,7 @@ Run Pi inside cmux. See [installation](../README.md#install).
 
 | Task | Command |
 |---|---|
+| Diagnose/setup cmux and panel | `/cmdoctor` |
 | New sidebar chat | `/cmn <prompt>` |
 | Pi right/below | `/cmv [prompt]`, `/cmh [prompt]` |
 | Return to origin | `/cmbk` or **Ctrl+Alt+B** |
@@ -22,6 +23,30 @@ Aliases: `/cmux-v` → `/cmv`, `/cmux-h` → `/cmh`, `/cmov` → `/cmo`, `/z` �
 
 **Inspect failed opens before retrying:** creation may have succeeded. The package never retries creation automatically.
 
+## Doctor and panel setup
+
+Install with `pi install npm:pi-cmux` (Pi **1.3.0+**, Node **22.19.0+**), then invoke `/cmdoctor`. This human diagnostic command remains reachable outside verified cmux; normal workflows still require a verified cmux caller. Registration/startup does not run doctor probes. Invocation and **Refresh** are read-only: no installation, settings edits, beta enablement, hooks, network setup or workflow launch.
+
+The Powerline-inspired native Pi overlay uses the active theme. Wide layouts show checks beside selected-check details/remediation; narrow layouts stack them. The first error is selected initially. **Tab/Shift-Tab** cycles checks/details/actions; **arrows** select checks, scroll details or choose an action; **PgUp/PgDn** pages details; **Enter** runs only the focused action; **Esc** closes. There is no timed or automatic dismissal. Below **42 columns × 18 rows**, a resize message replaces the controls and actions are disabled; Esc still works. Non-TUI/headless/print/RPC contexts, or unavailable custom UI, receive a plain-text report without a model turn and without actions.
+
+### Diagnostics and remediation
+
+Doctor queries `cmux --version` and `cmux --json rpc system.capabilities '{}'`, checking the native response shape and required advertised method groups: **Identity/locality**, **Surfaces/workspaces**, **Browser**, **Messaging**, **Sidebar data** (`extension.sidebar.snapshot`), **Layout/navigation** (`system.tree`), opt-in **Notifications** (`notification.create`) and optional **Sidebar flash** (`surface.trigger_flash`), plus the `events.v1` capability for the browser annotation event stream. It separately verifies exact caller UUIDs/local ownership, inspects the panel as text, queries sidebar templates and resolves settings. Advertisement is not proof of method behavior, CLI flag compatibility or authorization. Legacy sidebar commands `set-status`, `clear-status`, `log`, `set-progress` and `clear-progress` have no established RPC-advertisement contract and get an explicit **unverified** row, rather than guessed RPC names or mutating support probes. Notification/flash CLI flags are likewise not exercised by their native RPC advertisements. Template JSON does not establish a supported beta-state schema: **custom-sidebar beta availability stays unverified**, even after a successful query. Check cmux's **Settings → Custom Sidebars** manually.
+
+Missing/unsupported required methods are errors, not healthy results. Executable/PATH, socket, authentication, nonzero exit, timeout, stderr, malformed JSON and unexpected capability-shape failures remain visible with details/remediation; absent valid evidence leaves required groups unverified. Check the reported executable/PATH, running cmux app, socket access and authentication; use a compatible cmux build for missing methods, then explicitly choose **Refresh**. Probes are bounded (5 seconds each); no repair or retry is automatic.
+
+### Explicit install, update and open
+
+- **Refresh (read-only)** repeats collection only. An action result does not silently recollect; choose Refresh for a new report.
+- **Install/update panel** separately asks for confirmation, showing `~/.config/cmux/sidebars/agent-state-panel.js`, its state, raw-byte full-file SHA-256 and permission mode. It uses the npm-packaged canonical asset and `lib/panel-install.mjs` (Node built-ins only), including from an extracted npm package without a checkout or Pi dependencies. No pinned executable paths, bridge or worktree imports are added. The managed header's body checksum identifies current/outdated/modified content; a header is not overwrite permission. Headerless legacy files are warned as modified.
+- Replacement is authorized only for the exact inspected full-file hash and unchanged bytes, permission mode and path. Doctor refuses symlink leaves and existing symlink ancestors, non-file targets and changed paths/content after confirmation. Existing raw bytes and permission mode are preserved in an exclusive `.backup-<timestamp>` before replacement; the replacement retains that mode even under a restrictive umask. Fresh installations use private `0600` creation. Both file identity and managed-body checksums use raw bytes, so damaged UTF-8 cannot hide a change during confirmation; temporary-file collisions must not delete unrelated files. Cancellation writes nothing; already-current content is unchanged. Installation never opens the panel or changes settings/beta state.
+- **Show Pi Agents (no focus)** is a separate explicit choice, not an install side effect. It requires an initially verified ordinary-local caller, revalidates exact window/workspace/pane/surface UUIDs and local ownership, and requires an installed regular panel file. It issues one `right-sidebar set custom agent-state-panel` request with exact workspace/window and `--no-focus`. Remote, stale, ambiguous or unverified callers are refused; uncertain errors are shown without retry. Inspect cmux before deliberately trying again. Opening may evaluate the installed panel, unlike read-only collection: inspect modified/legacy copies first.
+- **Hide right sidebar** makes one explicit hide request to the same initially verified local caller window, with the same session/identity/locality guards and no retry. It hides the entire right sidebar, including Files/Find if selected, and does not require an installed panel. Neither visibility action edits settings or enables beta. On cmux 0.65.2, custom panels are excluded from the native mode-tab bar; Show selects Pi Agents directly rather than adding a Custom tab.
+
+For recovery, retain the reported backup path and compare its contents with the installed file before manually restoring the desired copy. Do not delete uninspected user changes or backups. Re-run doctor/Refresh after recovery; installation does not validate native UI behavior. To hide the panel manually use `cmux right-sidebar hide`; disabling auto-open alone does not hide a panel cmux remembers.
+
+Repository contributors may optionally use `node examples/sidebars/install-agent-state-panel.mjs` (repository-only CLI, **not shipped**). It reuses the shared installer logic; `--replace <observed-full-file-sha256>` explicitly authorizes a replacement and backup. The supported npm setup route is `/cmdoctor`, not that repository CLI. See [panel documentation](../examples/sidebars/README.md) and [validation evidence and capture commands](doctor-validation.md).
+
 ## Configuration
 
 Settings go in `~/.pi/agent/settings.json` (or `$PI_CODING_AGENT_DIR/settings.json`) and project `.pi/settings.json`. Project settings override global settings; `/reload` applies changes.
@@ -36,7 +61,7 @@ Set environment variables before starting Pi. `/reload` cannot import exports fr
 
 `pi-cmux.panel.autoOpen` defaults to `false`; a project boolean overrides the global boolean. Only literal booleans are accepted; malformed/unreadable settings or invalid panel options disable this attempt. Missing settings inherit normally. No user settings are written automatically.
 
-Requires the separately installed repository prototype at `~/.config/cmux/sidebars/agent-state-panel.js` (a regular file) and interactive Pi in a verified ordinary-local cmux workspace with exact caller UUIDs. It opens **agent-state-panel** once at startup or explicit `/reload`, targets that workspace's window and uses `--no-focus`. It neither installs the panel nor enables cmux's custom-sidebar beta. Unsupported commands, timeouts or other failures never trigger a retry.
+Requires the separately installed packaged panel at `~/.config/cmux/sidebars/agent-state-panel.js` (a regular file) and interactive Pi in a verified ordinary-local cmux workspace with exact caller UUIDs. It opens **agent-state-panel** once at startup or explicit `/reload`, targets that workspace's window and uses `--no-focus`. It neither installs the panel nor enables cmux's custom-sidebar beta. Unsupported commands, timeouts or other failures never trigger a retry.
 
 There is no visibility watcher: manual closure remains respected for that runtime, and `/new`, `/resume`, `/fork`, session updates and agent turns do not reopen it. Shutdown/session replacement fences pending opens. New Pi processes and explicit extension reloads can make a new configured attempt. Headless/SDK/RPC/print runs, missing panels and remote-owned/unverified workspaces do nothing. Setting `false` stops auto-open; it does not close a panel that cmux restores from its own saved UI state.
 

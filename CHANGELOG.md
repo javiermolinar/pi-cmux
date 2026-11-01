@@ -4,7 +4,11 @@
 
 ### Added
 
-- Repository-only cmux custom right-panel prototype in `examples/sidebars/agent-state-panel.js`: live per-agent symbols/colors, workspace rollups, local foldable groups (search temporarily reveals agents), exact current-agent highlighting, scope/search and workspace-qualified surface navigation. Preserves the stock left sidebar. The launch-bridge experiment remains covered by fixture tests but is not exposed by a panel button. Includes state/scene, launch-fixture and installer regression tests.
+- `/cmdoctor`: diagnostic-only setup command available outside verified cmux while normal workflows remain guarded. Read-only capability discovery, exact caller/locality, panel and settings inspection; visible query failures/missing required methods, remediation and explicitly unverified beta availability. Advertisements do not prove permissions.
+- Active-theme, Powerline-inspired native Pi doctor overlay with selected-check details, keyboard navigation, explicit read-only Refresh, Esc/cancellation, no automatic dismissal, responsive layout and plain-text fallback without a model turn. Actions are disabled below 42 columns × 18 rows.
+- Explicit separately confirmed panel install/update and separate single `--no-focus` open for the exact verified local caller window. Package the canonical panel asset and shared Node-only helper for extracted npm installs without worktree/pinned bridge dependencies. Warn on legacy/modified content, authorize updates by exact full-file SHA-256 and retain exclusive backups; doctor rejects symlink leaves/ancestors and stale confirmations. No automatic installation, beta/network setup or settings changes.
+- Package-artifact, capability-diagnostic and doctor UI/action regression fixtures; record runtime/fake-CLI and terminal-capture evidence separately from native observations in [doctor validation](docs/doctor-validation.md). Live Pi UI verification remains separate.
+- Packaged cmux custom right-panel prototype in `examples/sidebars/agent-state-panel.js`: live per-agent symbols/colors, workspace rollups, local foldable groups (search temporarily reveals agents), exact current-agent highlighting, scope/search and workspace-qualified surface navigation. Preserves the stock left sidebar. The launch-bridge experiment remains covered by fixture tests but is not exposed by a panel button. Includes state/scene, launch-fixture and installer regression tests.
 - Default-off `pi-cmux.panel.autoOpen` setting in agent-directory/project Pi settings. When explicitly enabled, interactive startup or `/reload` attempts one `--no-focus` open of the already-installed agent panel in the verified ordinary-local caller's window. Project `false` opts out; no installation, beta enablement, headless/remote/unverified effects, closure watcher or retry.
 - Sidebar-only session aliases through **Name in sidebar…** / **Use automatic name** context-menu actions and a cancellable inline editor. Names remain stable through prompt/status updates, are searchable alongside original task text, and are scoped to workspace + agent. In-memory until panel reload; no tab/workspace renaming or host writes.
 - **Attention** filter in the agent state panel: show explicit needs-input or exact-surface unread agents, combined with scope/search before display caps. Header counts follow the filter; workspace rollups remain complete. No reordering, navigation, notification-read actions or model turns.
@@ -12,12 +16,16 @@
 
 ### Changed
 
+- Expose explicit **Show Pi Agents (no focus)** and **Hide right sidebar** actions in `/cmdoctor`. Both target only the originally verified local caller window and never retry; Hide needs no installed panel. Do not claim a native Custom tab on cmux 0.65.2, which excludes custom panels from its tab bar.
 - Name agent rows by task title or latest prompt, falling back to **Untitled session**, instead of repeating **Pi**. Omit Pi from the secondary metadata line while preserving other agent names and state/unread/subagent details.
 - Remove **+ New Pi** from the agent state panel; keep the panel focused on existing agents and navigation.
 - Remove the agent state panel's footer legend and its divider; retain state symbols/colors and per-agent status labels.
 
 ### Fixed
 
+- Hash installed panel bytes without UTF-8 normalization, reject byte/mode changes during confirmation, and preserve existing permission modes in replacements/backups; fresh files remain private. Add raw-byte and restrictive-umask regressions.
+- Cover layout/navigation, browser event-stream, notification and flash advertisements in doctor; explicitly report legacy sidebar CLI support as unverified instead of inferring it from unrelated RPCs. Use independently specified capability fixtures.
+- Preserve unrelated pre-existing temporary files when an installer temporary-path collision prevents replacement; retain backup and exact-content replacement protections.
 - Show only the most recently active tracked session per exactly resolved live terminal in the agent panel. Prevent duplicate rows/highlights after `/new`; apply the same roster to counts, rollups, search, Attention and display caps, and reject stale navigation/naming callbacks. Distinct terminals and unresolved agents remain separate.
 - Resolve cmux 0.65.2's legacy agent Bonsplit IDs through the explicit panel binding and the live tab's RPC surface ID. Refuse stale/ambiguous matches; do not send panel/tab IDs directly to focus. Verified live startup and cross-workspace navigation via installed-runtime event dispatch/native RPCs, plus a native highlight screenshot; mouse hit targets remain unverified.
 - Hide workspaces without tracked agents from the agent state panel in both scopes and search, before display caps apply. Idle and ended agents remain visible; removing the last tracked agent removes its workspace row.

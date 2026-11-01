@@ -29,7 +29,7 @@ pi install npm:pi-cmux
 npx pi-cmux
 ```
 
-Run Pi inside cmux. Outside a verified cmux terminal, the package stays disabled: no commands, tools, shortcuts or lifecycle hooks are registered. A reachable cmux socket alone does not enable it.
+Run Pi inside cmux, then use **`/cmdoctor`** for diagnostics and explicit panel setup. The diagnostic-only command is also reachable outside a verified cmux terminal; normal commands, tools, shortcuts and lifecycle workflows remain disabled there. A reachable socket alone does not enable them. Invoking doctor only reads diagnostics; it does not install, configure or open anything.
 
 For native notifications, session restore and prompt previews:
 
@@ -43,6 +43,7 @@ Package notifications default to off to avoid duplicate alerts. Zoxide is needed
 
 | Task | Command |
 |---|---|
+| Diagnose/setup cmux and panel | `/cmdoctor` |
 | New sidebar chat | `/cmn <prompt>` |
 | Pi right/below | `/cmv [prompt]`, `/cmh [prompt]` |
 | Tool right/below/tab | `/cmo <cmd>`, `/cmoh <cmd>`, `/cmt <cmd>` |
@@ -96,11 +97,15 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 
 ## Sidebar prototype
 
-A repository-only [agent state right panel](examples/sidebars/README.md) shows live state symbols/colors, foldable workspace groups, exact current-agent highlighting and surface actions only for workspaces with tracked agents (including idle/ended agents). It keeps only the most recently active session per exactly resolved live terminal, so `/new` does not leave duplicate rows or highlights; counts and filters use the same roster. An **Attention** toggle filters to needs-input or exact-surface unread agents. Right-click sessions to assign stable sidebar-only aliases until the panel reloads; automatic names use task titles/latest prompts rather than repeating Pi. The panel has no workspace creation button. It preserves the stock left sidebar. A live startup/cross-workspace RPC smoke and native highlight screenshot passed on cmux 0.65.2; native mouse targets, other layouts and cross-tab/multi-window focus remain unverified.
+The packaged [agent state right panel](examples/sidebars/README.md) shows live state symbols/colors, foldable workspace groups, exact current-agent highlighting and surface actions only for workspaces with tracked agents (including idle/ended agents). It keeps only the most recently active session per exactly resolved live terminal, so `/new` does not leave duplicate rows or highlights; counts and filters use the same roster. An **Attention** toggle filters to needs-input or exact-surface unread agents. Right-click sessions to assign stable sidebar-only aliases until the panel reloads; automatic names use task titles/latest prompts rather than repeating Pi. The panel has no workspace creation button. It preserves the stock left sidebar. A live startup/cross-workspace RPC smoke and native highlight screenshot passed on cmux 0.65.2; native mouse targets, other layouts and cross-tab/multi-window focus remain unverified.
+
+Use `/cmdoctor`: its Powerline-inspired native Pi overlay uses the active theme, shows selected-check details and remediation, and offers **Refresh (read-only)**, separately confirmed **Install/update panel**, and explicit **Show Pi Agents (no focus)** / **Hide right sidebar** buttons. **Tab/Shift-Tab** changes focus, **arrows** navigate, **Enter** activates actions, **PgUp/PgDn** scroll details and **Esc** closes. It stays open until dismissed; narrow terminals stack details and checks, and below **42 columns × 18 rows** actions are disabled. Non-interactive or unavailable custom UI falls back to plain text without a model turn.
+
+The npm package includes the canonical asset and shared Node-only installer helper: no checkout, pinned launch bridge or development dependencies are required. Updates warn about legacy/modified files, require exact raw-byte SHA-256 confirmation and preserve backups and existing file modes; doctor refuses symlink targets/ancestors. Capability errors remain visible; advertised methods do not prove permissions, and custom-sidebar beta availability remains explicitly unverified. See [setup and recovery](docs/usage.md#doctor-and-panel-setup) and [validation evidence/limits](docs/doctor-validation.md).
 
 ### Auto-open (opt-in)
 
-After separately installing the prototype panel, add this to Pi's `settings.json`:
+After separately installing the panel, manually add this to Pi's `settings.json`:
 
 ```json
 { "pi-cmux": { "panel": { "autoOpen": true } } }

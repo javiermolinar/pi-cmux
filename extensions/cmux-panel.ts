@@ -1,39 +1,18 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { lstatSync, readFileSync } from "node:fs";
+import { lstatSync } from "node:fs";
+import { resolvePanelSettings } from "../lib/panel-settings.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { execCmux, getCallerInfo } from "./cmux-core.ts";
 import { uuid } from "../lib/orientation/state.ts";
 import { assertLocalWorkspace } from "../lib/ssh/terminal.ts";
 
-function object(value: unknown): value is Record<string, unknown> {
-	return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-/** Strict opt-in; project false overrides global true. Invalid settings fail closed. */
 function panelAutoOpen(cwd: string): boolean {
-	let enabled = false;
-	for (const path of [join(getAgentDir(), "settings.json"), join(cwd, ".pi", "settings.json")]) {
-		try {
-			const settings: unknown = JSON.parse(readFileSync(path, "utf8"));
-			if (!object(settings)) throw new Error("Invalid settings");
-			const section = settings["pi-cmux"];
-			if (section === undefined) continue;
-			if (!object(section)) throw new Error("Invalid package settings");
-			const panel = section.panel;
-			if (panel === undefined) continue;
-			if (!object(panel)) throw new Error("Invalid panel settings");
-			if (panel.autoOpen === undefined) continue;
-			if (typeof panel.autoOpen !== "boolean") throw new Error("Invalid autoOpen setting");
-			enabled = panel.autoOpen;
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-			console.warn(`[pi-cmux] Panel auto-open disabled: invalid or unreadable settings in ${path}`);
-			return false;
-		}
+	const result = resolvePanelSettings(cwd);
+	for (const error of result.errors) {
+		console.warn(`[pi-cmux] Panel auto-open disabled: invalid or unreadable settings in ${error.path}`);
 	}
-	return enabled;
+	return result.autoOpen;
 }
 
 function installedPanelExists(): boolean {

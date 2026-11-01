@@ -12,7 +12,7 @@ const LEGACY_EXTENSION_DIR = path.join(AGENT_DIR, "extensions", PACKAGE_NAME);
 const PACKAGE_DIR = path.join(AGENT_DIR, "packages", PACKAGE_NAME);
 const PACKAGE_SETTINGS_ENTRY = `./packages/${PACKAGE_NAME}`;
 const SOURCE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const FILES_TO_COPY = ["package.json", "README.md", "CHANGELOG.md"];
+const FILES_TO_COPY = ["package.json", "README.md", "CHANGELOG.md", "examples/sidebars/agent-state-panel.js"];
 const DIRECTORIES_TO_COPY = ["extensions", "lib", "docs"];
 
 const args = process.argv.slice(2);
@@ -72,7 +72,9 @@ function copyInstall() {
 	fs.rmSync(PACKAGE_DIR, { recursive: true, force: true });
 	ensureDir(PACKAGE_DIR);
 	for (const file of FILES_TO_COPY) {
-		fs.copyFileSync(path.join(SOURCE_DIR, file), path.join(PACKAGE_DIR, file));
+		const destination = path.join(PACKAGE_DIR, file);
+		ensureDir(path.dirname(destination));
+		fs.copyFileSync(path.join(SOURCE_DIR, file), destination);
 	}
 	for (const dir of DIRECTORIES_TO_COPY) {
 		fs.cpSync(path.join(SOURCE_DIR, dir), path.join(PACKAGE_DIR, dir), { recursive: true });
