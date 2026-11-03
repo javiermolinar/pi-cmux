@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Hide closed (`ended`) sessions from the agent panel, counts, search and Attention. Remove workspaces with no open sessions, and deduplicate before hiding closed sessions so an older session on the same terminal cannot reappear. Idle sessions remain visible.
+
 ## [0.5.0] - 2026-11-01
 
 ### Added

@@ -206,8 +206,9 @@ function tabFor(w, a) {
 
 function rosterAgents(w) {
   // cmux retains prior sessions after /new and supplies them most-recent-first.
-  // Keep one session per exactly resolved live terminal BEFORE any filtering
-  // or state sorting. Never merge unresolved agents by a guessed binding.
+  // Keep one session per exactly resolved live terminal BEFORE hiding ended
+  // sessions, so closing the latest cannot reveal an older retained session.
+  // Never merge unresolved agents by a guessed binding.
   const seen = new Set();
   return (w.agents ?? []).filter((a) => {
     const surfaceId = tabFor(w, a)?.surfaceId;
@@ -215,7 +216,7 @@ function rosterAgents(w) {
     if (seen.has(surfaceId)) return false;
     seen.add(surfaceId);
     return true;
-  });
+  }).filter((a) => a.status !== "ended");
 }
 
 function scopedAgents(w) {

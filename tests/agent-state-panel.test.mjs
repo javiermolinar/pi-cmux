@@ -18,7 +18,7 @@ const fixture = () => [
       { id: "a-2", name: "Codex", title: "Tests", status: "needs_input", panelId: "unresolved-panel" },
     ] },
   { id: "ws-2", title: "Same title", selected: false, status: "todo", tabs: [],
-    agents: [{ id: "a-1", name: "Pi", title: "Review change", status: "ended" },
+    agents: [{ id: "a-1", name: "Pi", title: "Review change", status: "idle" },
       { id: "idle", status: "idle" }, { id: "future", status: "future_state" }] },
   { id: "empty", title: "Untracked", status: "todo", tabs: [] },
 ];
@@ -43,7 +43,7 @@ function logic(workspaces = fixture(), config) {
 test("all states have distinct symbols; unexpected/missing states stay unknown", () => {
   const h = logic();
   assert.deepEqual(h.json("STATE_ORDER.map(s => STATES[s].symbol)"), ["!", "●", "✓", "○", "?"]);
-  assert.deepEqual(h.json("totals()"), { needs_input: 1, working: 1, ended: 1, idle: 1, unknown: 1 });
+  assert.deepEqual(h.json("totals()"), { needs_input: 1, working: 1, ended: 0, idle: 2, unknown: 1 });
   for (const status of [undefined, "", "needs-attention", "toString", "__proto__", "error"]) {
     assert.equal(h.run(`agentState({status:${JSON.stringify(status)}})`), "unknown");
   }
@@ -57,7 +57,7 @@ test("workspace rollups combine separate lane/unread evidence without changing a
   assert.equal(rollup({ agents: [{ status: "idle" }, {}] }), "unknown");
   assert.equal(rollup({ status: "done" }), "ended");
   assert.equal(rollup({ status: "review" }), "ended");
-  assert.equal(rollup({ status: "todo", agents: [{ status: "ended" }] }), "ended");
+  assert.equal(rollup({ status: "todo", agents: [{ status: "ended" }] }), "unknown");
   assert.equal(rollup({ status: "working", agents: [{ status: "ended" }] }), "working");
   assert.equal(rollup({ unread: 1, agents: [{ status: "working" }] }), "needs_input");
   assert.equal(rollup({ status: "needs-attention" }), "needs_input");
@@ -81,14 +81,14 @@ test("scope/search retain complete rollups and stable composite keys, including 
   assert.equal(h.run("entries().length"), 0);
 });
 
-test("workspaces without tracked agents stay hidden in both scopes and search; idle/ended agents remain", () => {
+test("workspaces without open agents stay hidden in both scopes and search; idle agents remain", () => {
   const workspaces = fixture();
   workspaces.push({ id: "empty-list", title: "Untracked list", agents: [], selected: false,
     status: "working", unread: 2, tabs: [{ hasUnread: true }] });
   const h = logic(workspaces);
   assert.deepEqual(h.json("groups().map(g => g.w.id)"), ["ws-1", "ws-2"]);
   assert.ok(h.json("entries().filter(e => e.kind === 'agent').map(e => e.a.id)").includes("idle"));
-  assert.ok(h.json("entries().filter(e => e.kind === 'agent').map(e => e.a.status)").includes("ended"));
+  assert.ok(!h.json("entries().filter(e => e.kind === 'agent').map(e => e.a.status)").includes("ended"));
   h.run('setQuery("untracked")');
   assert.equal(h.run("entries().length"), 0, "matching workspace titles must not reveal empty workspaces");
   h.run('setQuery(""); setScopeAll(false)');
@@ -119,7 +119,7 @@ test("attention filter combines explicit input/unread evidence with search/scope
   h.run("setAttentionOnly(true)");
   assert.deepEqual(h.json("groups().map(g => g.w.id)"), ["ws-1"]);
   assert.deepEqual(h.json("totals()"), { needs_input: 1, working: 1, ended: 0, idle: 0, unknown: 0 });
-  assert.equal(h.run("countAgents(data.workspaces()[1].agents).ended"), 1, "workspace rollups remain complete");
+  assert.equal(h.run("countAgents(rosterAgents(data.workspaces()[1])).idle"), 2, "workspace rollups remain complete");
   h.run('setQuery("Review change")');
   assert.equal(h.run("entries().length"), 0, "search cannot bypass attention evidence");
   assert.equal(h.run("totals().working"), 1, "header totals are independent of search");
@@ -130,12 +130,15 @@ test("attention filter combines explicit input/unread evidence with search/scope
   workspaces[1].agents[0].surfaceId = "ended-surface";
   workspaces[1].tabs = [{ id: "ended-panel", surfaceId: "ended-surface", hasUnread: true }];
   assert.deepEqual(h.json("groups().map(g => g.w.id)"), ["ws-2"]);
-  assert.equal(h.run("totals().ended"), 1, "unread keeps the actual ended state");
+  assert.equal(h.run("totals().idle"), 1, "unread keeps the actual idle state");
+  workspaces[1].agents[0].status = "ended";
+  assert.equal(h.run("entries().length"), 0, "unread does not keep a closed session visible");
+  workspaces[1].agents[0].status = "idle";
   workspaces[1].agents[0].panelId = "stale-panel";
   assert.equal(h.run("entries().length"), 0, "unread on another/stale surface cannot leak in");
   h.run('setScopeAll(true); toggleWorkspace("ws-1"); setAttentionOnly(false)');
   assert.equal(h.run('workspaceCollapsed("ws-1")'), true);
-  assert.equal(h.run("totals().idle"), 1);
+  assert.equal(h.run("totals().idle"), 2);
   assert.deepEqual(h.json("groups().map(g => g.w.id)"), ["ws-1", "ws-2"]);
   assert.equal(h.actions.length, 0);
 });
@@ -241,12 +244,40 @@ test("only the latest session per exact live terminal participates in the roster
   ]);
 });
 
+test("closing the latest session removes it without resurrecting retained sessions", () => {
+  const w = { id: "ws", title: "Project", selected: true,
+    tabs: [{ id: "panel", surfaceId: "surface", focused: true, hasUnread: true }],
+    agents: [
+      { id: "new", title: "Current task", status: "idle", panelId: "panel" },
+      { id: "old", title: "Previous task", status: "needs_input", surfaceId: "surface" },
+    ] };
+  const h = logic([w]);
+  h.run('beginSessionName("ws", "new")');
+  assert.equal(h.run("totals().idle"), 1, "an idle session is still open");
+  w.agents[0].status = "ended";
+  assert.deepEqual(h.json("rosterAgents(data.workspaces()[0])"), []);
+  assert.deepEqual(h.json("totals()"), { needs_input: 0, working: 0, ended: 0, idle: 0, unknown: 0 });
+  assert.equal(h.run("entries().length"), 0, "remove the workspace with its last open session");
+  for (const query of ["Current task", "Previous task", "Project"]) {
+    h.run(`setQuery(${JSON.stringify(query)})`);
+    assert.equal(h.run("entries().length"), 0, "search cannot restore closed or superseded sessions");
+  }
+  h.run('setQuery(""); setAttentionOnly(true)');
+  assert.equal(h.run("entries().length"), 0, "unread cannot restore a closed session");
+  h.run('jumpAgent("ws", "new"); jumpAgent("ws", "old"); setRenameDraft("Late alias"); saveSessionName()');
+  assert.equal(h.actions.length, 0, "retained callbacks cannot navigate to closed sessions");
+  assert.match(h.run("renameError()"), /no longer tracked/);
+  w.tabs = [];
+  w.agents[1].status = "ended";
+  assert.equal(h.run("entries().length"), 0, "ended sessions stay hidden even without a live tab");
+});
+
 test("roster deduplication preserves distinct terminals, workspaces and unresolved agents", () => {
   const h = logic([{ id: "ws", selected: true,
     tabs: [{ id: "panel-1", surfaceId: "s1" }, { id: "panel-2", surfaceId: "s2" }],
     agents: [
       { id: "new", panelId: "panel-1", status: "idle" },
-      { id: "other", panelId: "panel-2", status: "ended" },
+      { id: "other", panelId: "panel-2", status: "idle" },
       { id: "stale", panelId: "missing", surfaceId: "s1", status: "idle" },
       { id: "unbound", status: "idle" },
       { id: "old", surfaceId: "s1", status: "working" },
@@ -270,6 +301,20 @@ test("session resets replace aliases and revalidate an open naming form", () => 
   assert.match(h.run("renameError()"), /no longer tracked/);
   assert.equal(h.run("agentTitle(data.workspaces()[0], rosterAgents(data.workspaces()[0])[0])"), "Untitled session");
   assert.equal(h.run("entries().filter(e => e.kind === 'agent').length"), 1);
+});
+
+test("closed sessions do not consume workspace or agent display caps", () => {
+  const h = logic([
+    ...Array.from({ length: 20 }, (_, i) => ({ id: `closed-${i}`,
+      agents: [{ id: "ended", status: "ended" }] })),
+    { id: "open", agents: [
+      ...Array.from({ length: 20 }, (_, i) => ({ id: `ended-${i}`, status: "ended" })),
+      { id: "live", status: "idle" },
+    ] },
+  ]);
+  assert.deepEqual(h.json("entries().map(e => e.key)"), ["w:open", "a:open:live"]);
+  assert.equal(h.run("totals().idle"), 1);
+  assert.equal(h.run("totals().ended"), 0);
 });
 
 test("superseded sessions do not consume the agent display cap", () => {
@@ -502,7 +547,7 @@ test("installed real JS runtime mounts, updates retained rows, filters, scopes a
   assert.ok(row);
   const next = fixture();
   next[0].agents[0].title = "Updated task";
-  next[0].agents[0].status = "ended";
+  next[0].agents[0].status = "idle";
   h.set("workspaces", next);
   assert.equal(h.text("Updated task").id, title.id); // kept identity; live binding
   h.dispatch(row.id, "tap");
@@ -526,7 +571,9 @@ test("installed real JS runtime mounts, updates retained rows, filters, scopes a
   assert.ok(h.text("Untracked"));
   assert.ok(h.text("Idle task"));
   h.set("workspaces", [{ ...untracked, agents: [{ id: "idle", title: "Ended task", status: "ended" }] }]);
-  assert.ok(h.text("Ended task"));
+  assert.ok(!h.text("Ended task"));
+  assert.ok(!h.text("Untracked"));
+  assert.ok(h.text("No agents in scope"));
   h.set("workspaces", [untracked]);
   assert.ok(!h.text("Untracked"));
   assert.ok(!h.text("Ended task"));
@@ -629,7 +676,7 @@ test("installed runtime keeps task labels reactive without rendering Pi as the a
   assert.deepEqual(h.logs, []);
 });
 
-test("installed runtime replaces a reset session with one row, count and highlight", runtimeOptions, () => {
+test("installed runtime replaces a reset session and removes it on close without reviving history", runtimeOptions, () => {
   const h = scene();
   const w = { id: "ws", title: "Project", selected: true,
     tabs: [{ id: "panel", surfaceId: "surface", focused: true }],
@@ -646,11 +693,19 @@ test("installed runtime replaces a reset session with one row, count and highlig
   assert.equal(h.text("-new").props.weight, "semibold");
   assert.equal([...h.nodes.values()].filter(n => n.props.text === "○ 1").length, 2,
     "header total and workspace count exclude the old needs-input session");
+  const retainedRow = highlights()[0].id;
   const search = [...h.nodes.values()].find(n => n.type === "textfield");
   h.dispatch(search.id, "edit", { text: "Old alias" });
   assert.ok(h.text("No matches"));
   h.dispatch(search.id, "edit", { text: "" });
   h.dispatch(highlights()[0].id, "tap");
+  w.agents[0].status = "ended";
+  h.set("workspaces", [w]);
+  assert.ok(h.text("No agents in scope"));
+  assert.ok(!h.text("Project") && !h.text("-new") && !h.text("Old alias"));
+  assert.equal(highlights().length, 0);
+  assert.ok(!h.text("○ 1"));
+  h.dispatch(retainedRow, "tap"); // Removed scene nodes cannot trigger stale navigation.
   assert.deepEqual(h.actions.map(({ method, params }) => ({ method, params })), [
     { method: "workspace.select", params: { workspace_id: "ws" } },
     { method: "surface.focus", params: { workspace_id: "ws", surface_id: "surface" } },

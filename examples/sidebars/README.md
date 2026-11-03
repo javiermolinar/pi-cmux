@@ -2,7 +2,7 @@
 
 [`agent-state-panel.js`](agent-state-panel.js) is a reactive **cmux right panel**. It keeps the stock left sidebar available. This prototype asset ships in the npm package alongside the shared Node-only installer helper. Use **`/cmdoctor`** in Pi for diagnostics and explicit setup; no worktree or pinned launch configuration is required. The panel itself is a cmux custom sidebar, not a Pi extension.
 
-The roster shows workspace rollups, agent states, scope/search, unread notifications and optional git/PR/progress details. Agent rows use a sidebar alias when set, otherwise the task title, tab's latest prompt or **Untitled session**. Redundant **Pi** labels are omitted from the secondary line; other agent names and unread/subagent/navigation details remain. State labels appear on agent rows; there is no footer legend. Use each workspace's chevron to fold its agent list; the title/metadata still select the workspace. Fold choices stay local to the panel until it reloads, preserve rollup counts and never reorder or navigate. Search temporarily expands matching groups; clear it to restore folds. The current agent surface gets a blue wash and semibold title only when its workspace is selected and its exact live tab is focused. Workspaces without tracked agents are hidden in both scopes, even if their title matches search or they have lane/unread evidence. Only the most recently active session per exactly resolved live terminal is shown, using cmux's most-recent-first session order (also the tie-breaker). Older sessions on that terminal are excluded before search, Attention filtering, state sorting and display caps. Distinct terminals and agents without an exact live binding remain separate. Idle, ended and unknown agents remain visible unless superseded on the same terminal. The panel has no workspace creation button; **+ New Pi** has been removed.
+The roster shows workspace rollups, agent states, scope/search, unread notifications and optional git/PR/progress details. Agent rows use a sidebar alias when set, otherwise the task title, tab's latest prompt or **Untitled session**. Redundant **Pi** labels are omitted from the secondary line; other agent names and unread/subagent/navigation details remain. State labels appear on agent rows; there is no footer legend. Use each workspace's chevron to fold its agent list; the title/metadata still select the workspace. Fold choices stay local to the panel until it reloads, preserve rollup counts and never reorder or navigate. Search temporarily expands matching groups; clear it to restore folds. The current agent surface gets a blue wash and semibold title only when its workspace is selected and its exact live tab is focused. Workspaces without open tracked agents are hidden in both scopes, even if their title matches search or they have lane/unread evidence. Only the most recently active session per exactly resolved live terminal is shown, using cmux's most-recent-first session order (also the tie-breaker). Older sessions on that terminal are excluded before search, Attention filtering, state sorting and display caps. Distinct terminals and agents without an exact live binding remain separate. Closed (`ended`) sessions are hidden after terminal deduplication, so closing the latest session cannot reveal an older one on that terminal. Idle and unknown agents remain visible unless superseded; closing the last open session removes its workspace row. The panel has no workspace creation button; **+ New Pi** has been removed.
 
 ## Sidebar names
 
@@ -12,7 +12,7 @@ Aliases stay stable as prompts, status, search and scope change. Search matches 
 
 ## Attention filter
 
-Click **Attention** in the header to show only agents with explicit `needs_input` state or an unread notification on their exactly resolved live tab. It starts off and turns amber when enabled; click again to show all tracked agents. Working, idle, ended and unknown agents can match through unread evidence without changing their actual state. Workspace unread counts or status lanes alone do not identify an agent and do not qualify it.
+Click **Attention** in the header to show only agents with explicit `needs_input` state or an unread notification on their exactly resolved live tab. It starts off and turns amber when enabled; click again to show all tracked agents. Working, idle and unknown agents can match through unread evidence without changing their actual state. Workspace unread counts or status lanes alone do not identify an agent and do not qualify it.
 
 The filter combines with workspace scope and search, applies before display caps and preserves fold choices. It changes only this panel: no navigation, notification-read action, creation or model turn. Like scope/folds, it resets when the panel reloads.
 
@@ -22,27 +22,27 @@ The filter combines with workspace scope and search, applies before display caps
 | --- | --- | --- |
 | `!` | Amber | `needs_input`; a separate `! unread` label flags surface notifications |
 | `●` | Blue | `working` |
-| `✓` | Green | `ended`: ended/review, **not** proof of success or approval |
+| `✓` | Green | Review workspace lane; `ended` agent sessions are closed and excluded from the roster |
 | `○` | Native secondary | Explicit `idle` only |
 | `?` | Purple | Missing or unrecognized state |
 
-Workspace rollups combine **all** agents, workspace lanes and unread evidence, in this priority order:
+Workspace rollups combine the **open deduplicated roster**, workspace lanes and unread evidence, in this priority order:
 
 1. Attention: an agent needs input, workspace/surface unread, or `needs-attention` lane.
 2. Working: a working agent or `working` lane.
-3. Review: an ended agent or `review`/`done` lane.
+3. Review: a `review`/`done` lane (not proof of success or approval).
 4. Unknown: unknown agents.
 5. Idle: remaining tracked agents are explicitly idle.
 
-Unread is attention, not proof of pending input. Workspace lanes never overwrite individual agent states. `todo` alone does not prove a session is idle. Ended agents remain visible while cmux retains them unless a newer session shares their exact live terminal; child runs are summarized under the parent, not separately focusable sessions.
+Unread is attention, not proof of pending input. Workspace lanes never overwrite individual agent states. `todo` alone does not prove a session is idle. cmux may retain ended sessions as history; the panel excludes them even if their terminal still exists or has unread notifications. Terminal deduplication runs first to prevent older retained sessions from reappearing. Child runs are summarized under the parent, not separately focusable sessions.
 
-Header counts cover agents matching the selected scope and Attention filter, independent of search. Workspace counts/rollups cover the complete deduplicated roster in each workspace, independent of Attention/search/display limits. Rendering is capped at **12 matching workspaces × 6 agents**, attention first within each workspace, with overflow notes. Search can reveal capped rows. Workspace order follows cmux; there are no reorder or destructive actions.
+Header counts cover agents matching the selected scope and Attention filter, independent of search. Workspace counts/rollups cover the complete open deduplicated roster in each workspace, independent of Attention/search/display limits. Rendering is capped at **12 matching workspaces × 6 agents**, attention first within each workspace, with overflow notes. Search can reveal capped rows. Workspace order follows cmux; there are no reorder or destructive actions.
 
 ## Exact navigation
 
 - Workspace header → `workspace.select` with that workspace's `id`.
 - Agent row → re-resolve its workspace and agent, resolve exactly one live tab, select the workspace, then `surface.focus` with **both** `workspace_id` and that tab's current `surfaceId`.
-- With an explicit agent `panelId`, match it to the tab's `id` first; without it, require an exact agent/tab `surfaceId` match. cmux 0.65.2 can put a Bonsplit ID in an agent's `surfaceId` while its tab exposes the RPC surface ID, so those fields are not interchangeable. Never send `panelId`, tab `id` or a legacy Bonsplit ID directly to `surface.focus`. Missing/stale/ambiguous targets select the workspace only; removed workspaces/agents and superseded sessions produce no action.
+- With an explicit agent `panelId`, match it to the tab's `id` first; without it, require an exact agent/tab `surfaceId` match. cmux 0.65.2 can put a Bonsplit ID in an agent's `surfaceId` while its tab exposes the RPC surface ID, so those fields are not interchangeable. Never send `panelId`, tab `id` or a legacy Bonsplit ID directly to `surface.focus`. Missing/stale/ambiguous targets select the workspace only; removed workspaces/agents, closed sessions and superseded sessions produce no action.
 
 These checks use the latest sidebar snapshot (~1-second refresh), not an atomic socket transaction. A target can disappear between click and dispatch. The host handles RPC failures; the panel does not retry actions or explicitly mark notifications read.
 
@@ -102,7 +102,7 @@ The right-panel command keeps terminal focus and does not select a custom left s
 - Resize around 280–360 points and check light/dark clipping, including the Attention button. Confirm **+ New Pi** and the launch form are absent.
 - Right-click an agent to name it, then check prompt updates, search, Cancel/Escape and **Use automatic name**. Native menu hit targets/editor focus still need manual verification.
 - Toggle Attention, search and switch workspace scope. Verify only explicit needs-input or exact-surface unread agents remain and that clearing unread/changing state removes them without marking anything read.
-- Compare working/input/ended/idle/unread states against cmux metadata. Workspaces without tracked agents should stay hidden; add/remove the last tracked agent and check the workspace appears/disappears. Unknown agents must not show as idle.
+- Compare working/input/ended/idle/unread states against cmux metadata. Workspaces without open tracked agents should stay hidden; start/close the last session and check the workspace appears/disappears, including when the terminal remains open. Closing a session must not reveal older sessions on that terminal. Unknown agents must not show as idle.
 - Click agents across workspaces/tabs; verify exact focus and current-agent highlight. Fold/unfold groups, search through a folded group, clear search and check the fold returns. Search, switch scope, end/move/close sessions and check reactive updates.
 
 **Historical prototype evidence only:** an earlier panel was installed/enabled at the user's request, with previous copies backed up; native cmux validation reported 1 valid, 0 invalid. The doctor-validation native checks did **not** install the latest production panel or actually open it in live Pi. See [current evidence and limits](../../docs/doctor-validation.md).

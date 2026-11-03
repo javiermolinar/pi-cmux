@@ -92,7 +92,7 @@ Set environment variables before starting Pi. Package settings belong in `~/.pi/
 
 ## Sidebar
 
-The packaged [agent state right panel](examples/sidebars/README.md) shows live state symbols/colors, foldable workspace groups, exact current-agent highlighting and surface actions only for workspaces with tracked agents (including idle/ended agents). 
+The packaged [agent state right panel](examples/sidebars/README.md) shows live state symbols/colors, foldable workspace groups, exact current-agent highlighting and surface actions only for workspaces with open tracked agents (including idle agents). Closed (`ended`) sessions are hidden, and closing the last session removes its workspace from the panel.
 
 ### Auto-open (opt-in)
 
