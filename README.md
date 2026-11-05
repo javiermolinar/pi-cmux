@@ -101,3 +101,7 @@ After separately installing the panel, manually add this to Pi's `settings.json`
 ```json
 { "pi-cmux": { "panel": { "autoOpen": true } } }
 ```
+
+## Using Rex instead?
+
+[Rexpi](https://github.com/javiermolinar/rexpi) brings parallel Pi agents, terminal launching, project switching, and worktree management to [Rex](https://www.superlogical.com/rex).
